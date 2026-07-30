@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+SQLAlchemy
+alembic
+PyMySQL
+pandas
+openpyxl
+playwright
+python-dotenv

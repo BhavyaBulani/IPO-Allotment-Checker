@@ -1,0 +1,85 @@
+# ========================
+# Python
+# ========================
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+venv/
+.venv/
+env/
+.env
+*.env.*
+!*.env.example
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+*.pyo
+
+# ========================
+# Node.js / Frontend
+# ========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnp/
+.pnp.js
+
+# ========================
+# Build Outputs
+# ========================
+IPO_Checker/frontend/dist/
+IPO_Checker/frontend/dist-ssr/
+IPO_Checker/frontend/build/
+*.local
+
+# ========================
+# IDE & Editor
+# ========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ========================
+# OS Files
+# ========================
+.DS_Store
+Desktop.ini
+ehthumbs.db
+
+# ========================
+# Project-Specific
+# ========================
+memory/
+*.log
+*.sqlite3
+captcha_images/
+IPO_Checker/backend/captcha_images/
+
+# ========================
+# Docker
+# ========================
+db_data/
+
+# ========================
+# Misc
+# ========================
+.agents/
+.gemini/
