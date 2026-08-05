@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, UploadCloud, FileSpreadsheet, X, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, UploadCloud, FileSpreadsheet, X, Loader2, AlertCircle } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import IpoMultiSelect from '../components/IpoMultiSelect';
 import api from '../lib/api';

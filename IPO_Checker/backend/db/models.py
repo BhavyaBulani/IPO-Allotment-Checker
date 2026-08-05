@@ -7,6 +7,7 @@ Base = declarative_base()
 
 class IPOStatus(enum.Enum):
     Open = "Open"
+    Upcoming = "Upcoming"
     Closed = "Closed"
     Allotment_Announced = "Allotment Announced"
 

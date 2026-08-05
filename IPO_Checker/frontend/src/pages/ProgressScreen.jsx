@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Loader2, CheckCircle2, AlertCircle, PlayCircle, StopCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import api from '../lib/api';
 
 export default function ProgressScreen() {

@@ -27,11 +27,15 @@ def get_validated_ipos(db: Session = Depends(get_db)):
     ipos = db.query(IPO).filter(IPO.validated == True).all()
     
     def sort_key(ipo):
-        priority = 3
-        if ipo.status == IPOStatus.Allotment_Announced:
+        priority = 4
+        if ipo.status == IPOStatus.Open:
             priority = 1
-        elif ipo.status == IPOStatus.Open:
+        elif ipo.status == IPOStatus.Upcoming:
             priority = 2
+        elif ipo.status == IPOStatus.Allotment_Announced:
+            priority = 3
+        elif ipo.status == IPOStatus.Closed:
+            priority = 4
         return (priority, ipo.name)
         
     sorted_ipos = sorted(ipos, key=sort_key)

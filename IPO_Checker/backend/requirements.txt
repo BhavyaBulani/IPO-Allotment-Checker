@@ -7,3 +7,6 @@ pandas
 openpyxl
 playwright
 python-dotenv
+requests
+beautifulsoup4
+httpx

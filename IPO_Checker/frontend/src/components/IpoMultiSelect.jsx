@@ -100,7 +100,7 @@ export default function IpoMultiSelect({ selectedIpos, onChange }) {
     return matchesSearch && matchesStatus;
   });
 
-  const statuses = ['All', 'Allotment Announced', 'Open', 'Closed'];
+  const statuses = ['All', 'Allotment Announced', 'Open', 'Upcoming', 'Closed'];
 
   return (
     <div className="relative w-full" ref={dropdownRef}>
@@ -191,6 +191,7 @@ export default function IpoMultiSelect({ selectedIpos, onChange }) {
                       <span className={clsx("text-xs px-2 py-0.5 rounded-md border", 
                         ipo.status === 'Allotment Announced' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
                         ipo.status === 'Open' ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
+                        ipo.status === 'Upcoming' ? "bg-sky-500/10 text-sky-400 border-sky-500/20" :
                         "bg-slate-900 text-slate-400 border-slate-700"
                       )}>{ipo.status}</span>
                       {ipo.auto_detected && <span className="text-[10px] text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded-sm uppercase tracking-wider font-semibold">Auto-detected</span>}
