@@ -55,9 +55,11 @@ class IPO(Base):
     synced_at = Column(DateTime, nullable=True)
     auto_detected = Column(Boolean, nullable=False, server_default=text("0"))
     validated = Column(Boolean, nullable=False, server_default=text("0"))
+    registrar_id = Column(Integer, ForeignKey("registrars.id"), nullable=True)
 
     allotment_results = relationship("AllotmentResult", back_populates="ipo")
     batch_ipos = relationship("BatchIPO", back_populates="ipo")
+    registrar = relationship("Registrar")
 
 class Registrar(Base):
     __tablename__ = "registrars"

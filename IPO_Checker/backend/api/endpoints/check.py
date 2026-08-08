@@ -16,6 +16,37 @@ def validate_pan(pan: str) -> bool:
     """Validate standard Indian PAN format."""
     return bool(re.match(r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$', pan.upper()))
 
+def resolve_registrar_id(ipo: IPO, active_registrar_ids: list[int]) -> int:
+    """
+    Picks which registrar to check this IPO against.
+
+    Previously this was a round-robin (`registrar_ids[ipo.id % len(registrar_ids)]`)
+    which had nothing to do with which registrar actually handled the IPO —
+    it could send a KFin-registered IPO's PAN lookup to Bigshare and report
+    a false "Not Allotted". Now we use the registrar the IPO sync resolved
+    (ipo.registrar_id, populated via ipo_sync/registrar_map.py) and only
+    fall back to round-robin, with a loud warning, if that's missing.
+    """
+    if ipo.registrar_id and ipo.registrar_id in active_registrar_ids:
+        return ipo.registrar_id
+
+    if ipo.registrar_id and ipo.registrar_id not in active_registrar_ids:
+        import logging
+        logging.getLogger(__name__).warning(
+            "IPO '%s' (id=%s) maps to registrar_id=%s, but that registrar is not active. "
+            "Falling back to round-robin — results may be unreliable.",
+            ipo.name, ipo.id, ipo.registrar_id,
+        )
+    else:
+        import logging
+        logging.getLogger(__name__).warning(
+            "IPO '%s' (id=%s) has no resolved registrar. Falling back to round-robin — "
+            "results may be unreliable. Check the sync review queue for this IPO.",
+            ipo.name, ipo.id,
+        )
+
+    return active_registrar_ids[ipo.id % len(active_registrar_ids)]
+
 @router.post("/single")
 def check_single_client(request: SingleCheckRequest, db: Session = Depends(get_db)):
     # Validate IPOs
@@ -49,7 +80,7 @@ def check_single_client(request: SingleCheckRequest, db: Session = Depends(get_d
     results_detail = []
     for ipo in ipos:
         try:
-            registrar_id = registrar_ids[ipo.id % len(registrar_ids)]
+            registrar_id = resolve_registrar_id(ipo, registrar_ids)
             res = orchestrator.check_allotment(
                 pan=pan_value,
                 client_code=client_code_value,
@@ -274,7 +305,7 @@ async def check_bulk_upload(
         if not client or not client.id:
             continue
         for ipo in ipos:
-            registrar_id = registrar_ids[ipo.id % len(registrar_ids)]
+            registrar_id = resolve_registrar_id(ipo, registrar_ids)
             jobs.append({
                 "batch_id": batch.id,
                 "client_id": client.id,
