@@ -34,6 +34,7 @@ from db.session import SessionLocal
 from db.models import IPO, IPOStatus, Registrar
 from ipo_sync.sources.nse_source import fetch_nse_ipos
 from ipo_sync.sources.bse_source import fetch_bse_ipos
+from ipo_sync.sources.upstox_source import fetch_upstox_ipos
 from ipo_sync.reconcile import reconcile, ReconciledIPO
 
 logger = logging.getLogger(__name__)
@@ -151,11 +152,17 @@ def sync_ipos() -> dict:
         logger.error("BSE fetch raised unexpectedly: %s", exc, exc_info=True)
         bse_rows = []
 
-    if not nse_rows and not bse_rows:
-        logger.warning("Both NSE and BSE were unreachable this run. Database left unchanged.")
+    try:
+        upstox_rows = fetch_upstox_ipos()
+    except Exception as exc:
+        logger.error("Upstox fetch raised unexpectedly: %s", exc, exc_info=True)
+        upstox_rows = []
+
+    if not nse_rows and not bse_rows and not upstox_rows:
+        logger.warning("NSE, BSE, and Upstox were all unreachable this run. Database left unchanged.")
         return {"added": 0, "updated": 0, "held_for_review": 0, "source": "none"}
 
-    reconciled = reconcile(nse_rows, bse_rows)
+    reconciled = reconcile(nse_rows, bse_rows, upstox_rows)
 
     db = SessionLocal()
     added = updated = held_for_review = 0
@@ -180,7 +187,7 @@ def sync_ipos() -> dict:
         db.close()
 
     sources_used = "+".join(
-        s for s, rows in (("NSE", nse_rows), ("BSE", bse_rows)) if rows
+        s for s, rows in (("NSE", nse_rows), ("BSE", bse_rows), ("Upstox", upstox_rows)) if rows
     ) or "none"
 
     logger.info(
