@@ -10,6 +10,7 @@ MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "ipo_password")
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
 MYSQL_PORT = os.getenv("MYSQL_PORT", "3306")
 MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "ipo_checker")
+MYSQL_SSL_MODE = os.getenv("MYSQL_SSL_MODE", "")
 
 DATABASE_URL = f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}"
 
@@ -19,12 +20,17 @@ from sqlalchemy import event
 
 logger = logging.getLogger(__name__)
 
+connect_args = {}
+if MYSQL_SSL_MODE == "REQUIRED":
+    connect_args["ssl"] = {}
+
 # Configure connection pool
 engine = create_engine(
     DATABASE_URL,
     pool_size=30, # To comfortably cover configured worker-pool concurrency (e.g. 10-30)
     max_overflow=10,
-    pool_recycle=3600
+    pool_recycle=3600,
+    connect_args=connect_args
 )
 
 # Pool monitoring
