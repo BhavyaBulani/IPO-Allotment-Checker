@@ -3,9 +3,9 @@ import os
 from db.models import ResultStatus
 from .base import RegistrarResult
 from .link_intime import LinkIntimeRegistrar
-from .bigshare import BigshareRegistrar
 from .mufg import MufgRegistrar
 from .live.kfin import KFinLiveRegistrar
+from .live.bigshare import BigshareLiveRegistrar
 from .rate_limiter import rate_limiter
 
 APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
@@ -13,14 +13,13 @@ APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
 
 class FallbackOrchestrator:
     def __init__(self):
-        # Registrar 2 (KFin Technologies) now has a real Playwright-backed
-        # integration. The other three remain mock implementations and are
-        # refused in production, so a live brokerage never reports a made-up
-        # "Allotted" / "Not Allotted" verdict.
+        # Registrars 2 (KFin) and 3 (Bigshare) now have real live integrations.
+        # Link Intime (1) and MUFG Intime (4) remain mock and are refused in
+        # production, so a live brokerage never reports a made-up verdict.
         self.registrars = {
             1: LinkIntimeRegistrar(),
             2: KFinLiveRegistrar(),
-            3: BigshareRegistrar(),
+            3: BigshareLiveRegistrar(),
             4: MufgRegistrar(),
         }
 
