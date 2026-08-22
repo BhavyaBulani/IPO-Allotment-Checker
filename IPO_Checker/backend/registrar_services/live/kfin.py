@@ -1,45 +1,39 @@
-"""KFin Technologies live IPO allotment scraper (Playwright).
+"""KFin Technologies live IPO allotment integration (Playwright).
 
-Targets KFin's public IPO status portal. ``SELECTORS`` below are a best-effort
-starting point and MUST be re-validated against the current live DOM before
-this is trusted in production — KFin changes the portal periodically. Every
-uncertain step raises or returns Website_Error, so a stale selector degrades
-to "could not check", never a wrong verdict.
+Targets KFin's public IPO status portal at https://ipostatus.kfintech.com.
+The portal is a React/MUI single-page app backed by a serverless query API.
+The form has no CAPTCHA: it asks for an IPO (autocomplete), a search type
+(PAN by default) and the identifier, then submits to:
 
-The portal is CAPTCHA-gated. Solving goes through 2Captcha when
-TWOCAPTCHA_API_KEY is set; without it the live check fails safely at the
-CAPTCHA step.
+    https://0uz601ms56.execute-api.ap-south-1.amazonaws.com/prod/api/query?type=pan
+
+Responses:
+
+    404 -> {"error": "Record Not Found"}   (no allotment for this PAN + IPO)
+    200 -> {"Name", "DP_CLID", "Pan_No", "App_Shares", "All_Shares", ...}
+
+``All_Shares > 0`` means allotted. Every unexpected shape degrades to
+``Website_Error`` so a stale selector or API change never fabricates a verdict.
 """
 
-import re
+import json
 
 from db.models import ResultStatus
 from .base_live import BaseLiveRegistrar
 from ..base import RegistrarResult
-from ..auto_solver_provider import AutoSolverProvider
 
-# Best-effort selectors. Re-validate against https://kcas.kfintech.com/ipostatus/
-# before relying on this in production.
+# Validated against the live DOM on 22-08-2026.
 SELECTORS = {
-    "search_type_pan": "input[name='searchType'][value='PAN']",  # TODO: validate
-    "pan_input": "input[name='pan']",                            # TODO: validate
-    "application_input": "input[name='applicationNo']",          # TODO: validate
-    "captcha_input": "input[name='captcha']",                    # TODO: validate
-    "captcha_image": "img#captchaImg",                           # TODO: validate
-    "submit": "button[type='submit']",                           # TODO: validate
-    "result_container": "#result, .result, .status",             # TODO: validate
+    "ipo_combobox": "#demo-multiple-name",
+    "ipo_option_list": "[role='listbox']",
+    "ipo_option": "[role='listbox'] [role='option']",
+    "pan_radio": "input[type='radio'][value='PAN']",
+    "pan_input": "#outlined-start-adornment",
+    "submit": "button:has-text('Submit')",
 }
 
-# Confident verdict phrases. These are best-effort and must be checked against
-# the live portal's actual result copy before this is trusted in production.
-ALLOTTED_RE = re.compile(
-    r"(?:you\s+have\s+been\s+allotted|\ballotted\s+shares?|\bshares?\s+allotted)",
-    re.IGNORECASE,
-)
-NOT_ALLOTTED_RE = re.compile(
-    r"(?:\bnot(?:\s+been)?\s+allotted\b|\bno\s+allotment\b)",
-    re.IGNORECASE,
-)
+API_URL_MARKER = "/api/query"
+RECORD_NOT_FOUND = "Record Not Found"
 
 
 class KFinLiveRegistrar(BaseLiveRegistrar):
@@ -51,55 +45,108 @@ class KFinLiveRegistrar(BaseLiveRegistrar):
     def registrar_id(self) -> int:
         return 2
 
-    portal_url = "https://kcas.kfintech.com/ipostatus/"
+    portal_url = "https://ipostatus.kfintech.com"
 
     def submit_query(self, page, pan, client_code, ipo_name) -> str:
-        # Prefer PAN; fall back to application number / client code.
-        if pan:
-            page.click(SELECTORS["search_type_pan"])
-            page.fill(SELECTORS["pan_input"], pan.strip().upper())
-        else:
-            page.fill(SELECTORS["application_input"], (client_code or "").strip().upper())
+        pan_value = (pan or "").strip().upper()
+        if not pan_value:
+            raise RuntimeError("KFin live check requires a PAN.")
 
-        self._solve_captcha(page, ipo_name)
-        page.click(SELECTORS["submit"])
-        page.wait_for_selector(SELECTORS["result_container"], state="visible")
-        return page.inner_text("body")
+        # 1) Choose the IPO in the autocomplete dropdown.
+        page.click(SELECTORS["ipo_combobox"])
+        page.wait_for_selector(SELECTORS["ipo_option_list"], state="visible")
+        page.wait_for_timeout(500)  # options render asynchronously
+        option = self._find_ipo_option(page, ipo_name)
+        if option is None:
+            raise RuntimeError(f"IPO not found in KFin dropdown: {ipo_name}")
+        option.click()
+        page.wait_for_timeout(300)
 
-    def _solve_captcha(self, page, ipo_name) -> None:
-        try:
-            locator = page.locator(SELECTORS["captcha_image"])
-            if locator.count() == 0:
-                raise RuntimeError("CAPTCHA image not found")
-            image_bytes = locator.screenshot()
-        except Exception as exc:  # noqa: BLE001
-            raise RuntimeError(f"Could not capture CAPTCHA image: {exc}")
+        # 2) PAN is the default search type; select it explicitly and fill it.
+        page.check(SELECTORS["pan_radio"])
+        page.fill(SELECTORS["pan_input"], pan_value)
 
-        solution = AutoSolverProvider().solve(
-            image_bytes, context={"registrar": self.name, "ipo": ipo_name}
-        )
-        if not solution:
-            raise RuntimeError(
-                "CAPTCHA solve failed; ensure TWOCAPTCHA_API_KEY is set and valid."
-            )
-        page.fill(SELECTORS["captcha_input"], solution)
+        # 3) Submit and capture the query API response.
+        with page.expect_response(
+            lambda r: API_URL_MARKER in r.url,
+            timeout=self.action_timeout_ms,
+        ) as resp_info:
+            page.click(SELECTORS["submit"])
+        return resp_info.value.text()
+
+    def _find_ipo_option(self, page, ipo_name):
+        wanted = (ipo_name or "").strip().upper()
+        if not wanted:
+            return None
+        options = page.query_selector_all(SELECTORS["ipo_option"])
+        for opt in options:
+            if (opt.inner_text() or "").strip().upper() == wanted:
+                return opt
+        for opt in options:
+            label = (opt.inner_text() or "").strip().upper()
+            if wanted in label or label in wanted:
+                return opt
+        return None
 
     def parse_result_text(self, text, pan, client_code, ipo_name) -> RegistrarResult:
         if not text or not text.strip():
+            return RegistrarResult(ResultStatus.Website_Error, "Empty KFin response.")
+
+        try:
+            data = json.loads(text)
+        except (TypeError, ValueError):
             return RegistrarResult(
-                ResultStatus.Website_Error, "Empty result page from KFin."
+                ResultStatus.Website_Error, "KFin returned a non-JSON response."
             )
 
-        # Negative first: "not allotted" must not be caught by the positive rule.
-        if NOT_ALLOTTED_RE.search(text):
+        if not isinstance(data, dict):
             return RegistrarResult(
-                ResultStatus.Not_Allotted, "Not allotted (parsed from KFin portal)."
+                ResultStatus.Website_Error, "Unexpected KFin response shape."
             )
-        if ALLOTTED_RE.search(text):
+
+        if "error" in data:
+            if str(data.get("error")).strip() == RECORD_NOT_FOUND:
+                return RegistrarResult(
+                    ResultStatus.Not_Allotted,
+                    "Record not found in KFin's allotment database (no allotment).",
+                )
             return RegistrarResult(
-                ResultStatus.Allotted, "Allotted (parsed from KFin portal)."
+                ResultStatus.Website_Error,
+                f"KFin query error: {data.get('error')}",
             )
+
+        if "All_Shares" in data:
+            shares = _parse_shares(data.get("All_Shares"))
+            if shares is None:
+                return RegistrarResult(
+                    ResultStatus.Website_Error,
+                    "Could not interpret KFin allotted share count.",
+                )
+            if shares > 0:
+                return RegistrarResult(
+                    ResultStatus.Allotted, f"Allotted {shares} shares (KFin)."
+                )
+            return RegistrarResult(
+                ResultStatus.Not_Allotted, "Allotted shares is zero (KFin)."
+            )
+
         return RegistrarResult(
             ResultStatus.Website_Error,
-            "Could not confidently determine the KFin result from the page.",
+            "Could not determine allotment from KFin response.",
         )
+
+
+def _parse_shares(value):
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+    text = str(value).replace(",", "").strip()
+    if not text:
+        return None
+    try:
+        return int(text)
+    except ValueError:
+        return None
