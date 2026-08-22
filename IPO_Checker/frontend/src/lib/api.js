@@ -1,16 +1,35 @@
 import axios from 'axios';
-
-const adminApiKey = import.meta.env.VITE_ADMIN_API_KEY || localStorage.getItem('admin_api_key');
+import { getToken, clearToken } from './auth';
 
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api', // FastAPI default local port
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-if (adminApiKey) {
-  api.defaults.headers.common['X-Admin-Key'] = adminApiKey;
-}
+// Attach the bearer token to every request. The admin API key is no longer
+// sent from the browser: it lived in the bundle/localStorage and was leaking.
+api.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// On auth failure, drop the token and send the user back to the login screen.
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      clearToken();
+      if (window.location.pathname !== '/login') {
+        window.location.assign('/login');
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default api;

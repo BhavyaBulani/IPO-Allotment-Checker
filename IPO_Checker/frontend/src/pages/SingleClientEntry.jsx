@@ -1,32 +1,27 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Search, Loader2 } from 'lucide-react';
-import IpoMultiSelect from '../components/IpoMultiSelect';
 import api from '../lib/api';
 
 export default function SingleClientEntry() {
   const [identifier, setIdentifier] = useState('');
-  const [selectedIpos, setSelectedIpos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
   const handleCheck = async (e) => {
     e.preventDefault();
-    if (!identifier || selectedIpos.length === 0) return;
+    if (!identifier) return;
 
     setLoading(true);
     setError(null);
     setResult(null);
 
     try {
-      const res = await api.post('/check/single', {
-        identifier,
-        ipo_ids: selectedIpos.map(ipo => ipo.id)
-      });
+      const res = await api.post('/check/pan', { identifier });
       setResult(res.data);
     } catch (err) {
-      setError(err.response?.data?.detail || "An unexpected error occurred");
+      setError(err.response?.data?.detail || 'An unexpected error occurred');
     } finally {
       setLoading(false);
     }
@@ -38,38 +33,36 @@ export default function SingleClientEntry() {
         <Link to="/" className="inline-flex items-center text-slate-400 hover:text-white mb-8 transition-colors">
           <ArrowLeft size={20} className="mr-2" /> Back to Mode Selection
         </Link>
-        
-        <div className="glass-panel rounded-3xl p-8 md:p-10 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-          
+
+        <div className="glass-panel rounded-3xl p-8 md:p-10 relative">
+          <div className="absolute inset-0 overflow-hidden rounded-3xl pointer-events-none">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+          </div>
+
           <h1 className="text-3xl font-bold text-white mb-2">Single Client Check</h1>
-          <p className="text-slate-400 mb-10">Verify allotment status for a single PAN or Client Code.</p>
+          <p className="text-slate-400 mb-10">Enter a PAN to check allotment status across all current IPOs.</p>
 
           <form onSubmit={handleCheck} className="space-y-6 relative z-10">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">PAN or Client Code</label>
-              <input 
-                type="text" 
+              <label className="block text-sm font-medium text-slate-300 mb-2">PAN</label>
+              <input
+                type="text"
                 value={identifier}
-                onChange={e => setIdentifier(e.target.value.toUpperCase())}
+                onChange={(e) => setIdentifier(e.target.value.toUpperCase())}
                 placeholder="e.g. ABCDE1234F"
-                className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner"
+                maxLength={10}
+                className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner tracking-widest font-mono"
                 required
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Select IPOs</label>
-              <IpoMultiSelect selectedIpos={selectedIpos} onChange={setSelectedIpos} />
-            </div>
-
-            <button 
-              type="submit" 
-              disabled={loading || !identifier || selectedIpos.length === 0}
+            <button
+              type="submit"
+              disabled={loading || identifier.length !== 10}
               className="w-full mt-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-6 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20"
             >
               {loading ? <Loader2 className="animate-spin" size={20} /> : <Search size={20} />}
-              {loading ? 'Verifying...' : 'Check Allotment Status'}
+              {loading ? 'Checking...' : 'Check Allotment Status'}
             </button>
           </form>
 
@@ -114,9 +107,9 @@ export default function SingleClientEntry() {
                   </div>
                 ) : (
                   <div>
-                    <span className="text-slate-400 block mb-2">Targeted IPOs:</span>
+                    <span className="text-slate-400 block mb-2">IPOs checked:</span>
                     <div className="flex flex-wrap gap-2">
-                      {result.ipos.map(name => (
+                      {result.ipos.map((name) => (
                         <span key={name} className="text-xs bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded border border-indigo-500/30">{name}</span>
                       ))}
                     </div>

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from db.session import get_db
 from db.models import UploadBatch, AllotmentResult, ResultStatus, Client, IPO, Registrar
+from api.security import mask_identifier
 from typing import Dict, Any, List
 import pandas as pd
 import io
@@ -73,7 +74,8 @@ def get_batch_results(batch_id: int, skip: int = 0, limit: int = 100, db: Sessio
     data = []
     for r in results:
         data.append({
-            "pan": r.pan or r.client_code, # Fallback to client_code if PAN is missing
+            # Mask identifiers in the JSON response: never return a full PAN.
+            "pan": mask_identifier(r.pan or r.client_code),
             "client_name": r.client_name,
             "ipo_name": r.ipo_name,
             "registrar_name": r.registrar_name or "Unknown",

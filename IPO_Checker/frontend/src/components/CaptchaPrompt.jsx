@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { ShieldAlert } from 'lucide-react';
+import api from '../lib/api';
 
 const CaptchaPrompt = () => {
     const [pendingCaptchas, setPendingCaptchas] = useState([]);
@@ -11,7 +11,7 @@ const CaptchaPrompt = () => {
     useEffect(() => {
         const interval = setInterval(async () => {
             try {
-                const response = await axios.get('http://localhost:8000/api/captcha/pending');
+                const response = await api.get('/captcha/pending');
                 setPendingCaptchas(response.data);
             } catch (error) {
                 console.error("Failed to fetch pending CAPTCHAs", error);
@@ -27,10 +27,10 @@ const CaptchaPrompt = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!solution.trim()) return;
-        
+
         setSubmitting(true);
         try {
-            await axios.post('http://localhost:8000/api/captcha/submit', {
+            await api.post('/captcha/submit', {
                 captcha_id: currentCaptcha.captcha_id,
                 solution: solution
             });
@@ -55,7 +55,7 @@ const CaptchaPrompt = () => {
                     </div>
                     <h2 className="text-xl font-semibold text-gray-800">CAPTCHA Required</h2>
                 </div>
-                
+
                 <p className="text-gray-600 mb-4 text-sm">
                     A registrar website requires manual verification. Please solve the CAPTCHA to continue the background check.
                 </p>
@@ -82,7 +82,7 @@ const CaptchaPrompt = () => {
                         className="w-full border-2 border-gray-200 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all font-mono text-center text-lg mb-4"
                         autoFocus
                     />
-                    
+
                     <button
                         type="submit"
                         disabled={!solution.trim() || submitting}
@@ -91,7 +91,7 @@ const CaptchaPrompt = () => {
                         {submitting ? 'Submitting...' : 'Submit Solution'}
                     </button>
                 </form>
-                
+
                 {pendingCaptchas.length > 1 && (
                     <p className="text-xs text-center text-gray-500 mt-4">
                         {pendingCaptchas.length - 1} more CAPTCHA(s) pending...

@@ -1,15 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
+from api.deps import require_auth
 from db.session import get_db
 from ipo_sync.auto_detect import sync_ipos as sync_ipos_from_dashboard
-from api.deps import verify_admin_key
 
 router = APIRouter()
 
-@router.post("", dependencies=[Depends(verify_admin_key)])
-def sync_ipos(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+
+@router.post("")
+def sync_ipos(db: Session = Depends(get_db), _: str = Depends(require_auth)):
     """
-    Triggers a manual sync of the IPOs from the Chittorgarh dashboard.
+    Triggers a manual sync of IPOs from the configured exchange sources.
     """
     try:
         result = sync_ipos_from_dashboard()
@@ -18,7 +20,7 @@ def sync_ipos(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
             "message": f"IPO sync complete. Added {result['added']}, updated {result['updated']} from {result['source']}.",
             "added": result["added"],
             "updated": result["updated"],
-            "source": result["source"]
+            "source": result["source"],
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to sync IPOs: {str(e)}")

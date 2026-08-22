@@ -1,5 +1,6 @@
 import os
 from sqlalchemy import create_engine
+from sqlalchemy.engine import URL
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 
@@ -12,7 +13,14 @@ MYSQL_PORT = os.getenv("MYSQL_PORT", "3306")
 MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "ipo_checker")
 MYSQL_SSL_MODE = os.getenv("MYSQL_SSL_MODE", "")
 
-DATABASE_URL = f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}"
+DATABASE_URL = URL.create(
+    drivername="mysql+pymysql",
+    username=MYSQL_USER,
+    password=MYSQL_PASSWORD,
+    host=MYSQL_HOST,
+    port=int(MYSQL_PORT),
+    database=MYSQL_DATABASE,
+)
 
 import logging
 import time

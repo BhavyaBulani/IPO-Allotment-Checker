@@ -44,8 +44,20 @@ export default function ResultsDashboard() {
     fetchDashboardData();
   }, [batchId, skip]);
 
-  const handleDownload = () => {
-    window.open(`http://localhost:8000/api/results/batch/${batchId}/export`, '_blank');
+  const handleDownload = async () => {
+    try {
+      const res = await api.get(`/results/batch/${batchId}/export`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `IPO_Results_Batch_${batchId}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to export results.');
+    }
   };
   
   const fetchLogs = async () => {

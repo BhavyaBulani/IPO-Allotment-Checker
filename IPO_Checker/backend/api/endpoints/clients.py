@@ -8,6 +8,9 @@ import re
 
 router = APIRouter()
 
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
 def validate_pan(pan: str) -> bool:
     """Validate standard Indian PAN format."""
     return bool(re.match(r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$', pan.upper()))
@@ -24,6 +27,9 @@ async def upload_client_list(file: UploadFile = File(...), db: Session = Depends
         raise HTTPException(status_code=400, detail="Invalid file type. Only .xlsx and .xls are supported.")
 
     content = await file.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="File is too large. Maximum size is 10 MB.")
+
     try:
         df = pd.read_excel(io.BytesIO(content))
     except Exception as e:

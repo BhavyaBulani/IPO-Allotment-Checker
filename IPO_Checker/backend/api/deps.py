@@ -1,12 +1,8 @@
-import os
-from fastapi import Security, HTTPException
-from fastapi.security.api_key import APIKeyHeader
+"""Shared FastAPI dependencies.
 
-API_KEY_NAME = "X-Admin-Key"
-api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+The previous admin API-key dependency has been replaced by bearer-token auth in
+``api.security``. This module keeps a single import point so endpoints don't
+need to know where the dependency lives.
+"""
 
-def verify_admin_key(api_key: str = Security(api_key_header)):
-    expected_key = os.environ.get("ADMIN_API_KEY", "admin_secret_key_123")
-    if api_key == expected_key:
-        return api_key
-    raise HTTPException(status_code=403, detail="Forbidden: Invalid or missing Admin API Key")
+from api.security import require_auth  # noqa: F401

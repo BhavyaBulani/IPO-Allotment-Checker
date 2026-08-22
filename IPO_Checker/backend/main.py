@@ -1,8 +1,11 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from api.router import api_router
 
 logging.basicConfig(level=logging.INFO)
@@ -58,10 +61,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="IPO Allotment Verification API", lifespan=lifespan)
 
-# Configure CORS for frontend access
+# Configure CORS for frontend access. Origins are read from CORS_ORIGINS
+# (comma-separated) so the wildcard is never used with credentials.
+def _cors_origins() -> list[str]:
+    raw = os.environ.get("CORS_ORIGINS", "http://localhost:5173").strip()
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, restrict to frontend domain
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

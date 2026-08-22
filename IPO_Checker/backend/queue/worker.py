@@ -179,7 +179,7 @@ async def run_batch_jobs(batch_id: int, jobs: list):
             failure_count=failure_count,
             timeout_count=timeout_count,
             cache_hit_count=cache_hit_count,
-            registrars_used=",".join(set([str(j["registrar_id"]) for j in jobs]))
+            registrars_used=",".join(sorted({str(j["registrar_id"]) for j in jobs if j.get("registrar_id") is not None}))
         )
         db.add(run_log)
         db.commit()

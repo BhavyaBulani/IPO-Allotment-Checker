@@ -1,51 +1,114 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
-from sqlalchemy.orm import Session
-from db.session import get_db
-from db.models import IPO
-from schemas.input import SingleCheckRequest
-from typing import List
-import re
-import pandas as pd
-import io
 import datetime
-from api.deps import verify_admin_key
+import io
+import logging
+import re
+
+import pandas as pd
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy.orm import Session
+
+from api.deps import require_auth
+from db.models import IPO, Registrar
+from db.session import get_db
+from schemas.input import PanCheckRequest, SingleCheckRequest
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Cap the raw upload size before pandas reads it, to avoid memory exhaustion.
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
 
 def validate_pan(pan: str) -> bool:
     """Validate standard Indian PAN format."""
     return bool(re.match(r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$', pan.upper()))
 
-def resolve_registrar_id(ipo: IPO, active_registrar_ids: list[int]) -> int:
-    """
-    Picks which registrar to check this IPO against.
 
-    Previously this was a round-robin (`registrar_ids[ipo.id % len(registrar_ids)]`)
-    which had nothing to do with which registrar actually handled the IPO —
-    it could send a KFin-registered IPO's PAN lookup to Bigshare and report
-    a false "Not Allotted". Now we use the registrar the IPO sync resolved
-    (ipo.registrar_id, populated via ipo_sync/registrar_map.py) and only
-    fall back to round-robin, with a loud warning, if that's missing.
+def resolve_registrar_id(ipo: IPO, active_registrar_ids: list[int]) -> int | None:
+    """
+    Resolve the registrar that actually handles this IPO.
+
+    Returns ``None`` when the IPO has no resolved registrar or its registrar is
+    inactive. The previous round-robin fallback could send a KFin-registered
+    IPO's PAN to Bigshare and report a confident-looking but wrong verdict, so
+    we now fail loud instead of guessing.
     """
     if ipo.registrar_id and ipo.registrar_id in active_registrar_ids:
         return ipo.registrar_id
 
-    if ipo.registrar_id and ipo.registrar_id not in active_registrar_ids:
-        import logging
-        logging.getLogger(__name__).warning(
-            "IPO '%s' (id=%s) maps to registrar_id=%s, but that registrar is not active. "
-            "Falling back to round-robin — results may be unreliable.",
+    if ipo.registrar_id:
+        logger.warning(
+            "IPO '%s' (id=%s) maps to registrar_id=%s, but that registrar is not active.",
             ipo.name, ipo.id, ipo.registrar_id,
         )
     else:
-        import logging
-        logging.getLogger(__name__).warning(
-            "IPO '%s' (id=%s) has no resolved registrar. Falling back to round-robin — "
-            "results may be unreliable. Check the sync review queue for this IPO.",
+        logger.warning(
+            "IPO '%s' (id=%s) has no resolved registrar. Check the sync review queue.",
             ipo.name, ipo.id,
         )
+    return None
 
-    return active_registrar_ids[ipo.id % len(active_registrar_ids)]
+
+def _run_check(orchestrator, db, pan, client_code, ipo, registrar_ids):
+    registrar_id = resolve_registrar_id(ipo, registrar_ids)
+    if registrar_id is None:
+        return {
+            "ipo": ipo.name,
+            "status": "Website Error",
+            "message": "No active registrar is mapped for this IPO; check was not run.",
+        }
+    try:
+        res = orchestrator.check_allotment(
+            pan=pan,
+            client_code=client_code,
+            ipo_name=ipo.name,
+            primary_registrar_id=registrar_id,
+        )
+        return {"ipo": ipo.name, "status": res.status.value, "message": res.raw_message}
+    except Exception as exc:  # noqa: BLE001 - keep the endpoint resilient per IPO
+        return {
+            "ipo": ipo.name,
+            "status": "Website Error",
+            "message": f"Failed to perform check: {str(exc)}",
+        }
+
+
+@router.post("/pan")
+def check_single_pan(request: PanCheckRequest, db: Session = Depends(get_db)):
+    """Check one PAN against every validated IPO (no IPO selection needed)."""
+    pan = request.identifier.upper()
+    if not validate_pan(pan):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid PAN format. Expected 10 characters: 5 letters, 4 digits, 1 letter.",
+        )
+
+    ipos = db.query(IPO).filter(IPO.validated == True).all()
+    if not ipos:
+        raise HTTPException(status_code=404, detail="No validated IPOs are available to check.")
+
+    from db.models import Client
+    from registrar_services.orchestrator import orchestrator
+
+    client = db.query(Client).filter(Client.pan == pan).first()
+    client_code = client.client_code if client else None
+
+    active_registrars = db.query(Registrar).filter(Registrar.active == True).all()
+    registrar_ids = [r.id for r in active_registrars] if active_registrars else [1]
+
+    results_detail = [
+        _run_check(orchestrator, db, pan, client_code, ipo, registrar_ids) for ipo in ipos
+    ]
+
+    return {
+        "status": "success",
+        "message": f"Checked PAN against {len(ipos)} IPO(s).",
+        "identifier_type": "PAN",
+        "ipos": [ipo.name for ipo in ipos],
+        "results": results_detail,
+    }
+
 
 @router.post("/single")
 def check_single_client(request: SingleCheckRequest, db: Session = Depends(get_db)):
@@ -53,12 +116,12 @@ def check_single_client(request: SingleCheckRequest, db: Session = Depends(get_d
     ipos = db.query(IPO).filter(IPO.id.in_(request.ipo_ids), IPO.validated == True).all()
     if len(ipos) != len(request.ipo_ids):
         raise HTTPException(status_code=400, detail="One or more selected IPOs are invalid or not found.")
-    
+
     # Determine if the input is a PAN or Client Code
     is_pan = validate_pan(request.identifier)
     pan_value = request.identifier if is_pan else None
     client_code_value = request.identifier if not is_pan else None
-    
+
     # Try to cross-reference the missing identifier from the DB
     from db.models import Client
     if is_pan:
@@ -69,54 +132,37 @@ def check_single_client(request: SingleCheckRequest, db: Session = Depends(get_d
         existing = db.query(Client).filter(Client.client_code == request.identifier).first()
         if existing and existing.pan:
             pan_value = existing.pan
-    
+
     # Execute the check via Orchestrator
     from registrar_services.orchestrator import orchestrator
-    from db.models import Registrar
-    
+
     active_registrars = db.query(Registrar).filter(Registrar.active == True).all()
     registrar_ids = [r.id for r in active_registrars] if active_registrars else [1]
-    
-    results_detail = []
-    for ipo in ipos:
-        try:
-            registrar_id = resolve_registrar_id(ipo, registrar_ids)
-            res = orchestrator.check_allotment(
-                pan=pan_value,
-                client_code=client_code_value,
-                ipo_name=ipo.name,
-                primary_registrar_id=registrar_id
-            )
-            results_detail.append({
-                "ipo": ipo.name,
-                "status": res.status.value,
-                "message": res.raw_message
-            })
-        except Exception as e:
-            results_detail.append({
-                "ipo": ipo.name,
-                "status": "Website Error",
-                "message": f"Failed to perform check: {str(e)}"
-            })
-    
+
+    results_detail = [
+        _run_check(orchestrator, db, pan_value, client_code_value, ipo, registrar_ids)
+        for ipo in ipos
+    ]
+
     return {
         "status": "success",
         "message": "Check completed.",
         "identifier_type": "PAN" if is_pan else "Client Code",
         "ipos": [ipo.name for ipo in ipos],
-        "results": results_detail
+        "results": results_detail,
     }
+
 
 @router.post("/bulk")
 async def check_bulk_upload(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...), 
+    file: UploadFile = File(...),
     ipo_ids: str = Form(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     if not (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
         raise HTTPException(status_code=400, detail="Invalid file type. Only .xlsx and .xls are supported.")
-    
+
     try:
         ipo_id_list = [int(i) for i in ipo_ids.split(",") if i.strip()]
     except ValueError:
@@ -124,9 +170,12 @@ async def check_bulk_upload(
 
     ipos = db.query(IPO).filter(IPO.id.in_(ipo_id_list), IPO.validated == True).all()
     if len(ipos) != len(ipo_id_list) or len(ipos) == 0:
-         raise HTTPException(status_code=400, detail="Invalid IPO selection.")
+        raise HTTPException(status_code=400, detail="Invalid IPO selection.")
 
     content = await file.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="File is too large. Maximum size is 10 MB.")
+
     try:
         df = pd.read_excel(io.BytesIO(content))
     except Exception as e:
@@ -144,7 +193,7 @@ async def check_bulk_upload(
             pan_col = col
         elif "client" in col_lower and "code" in col_lower and code_col is None:
             code_col = col
-            
+
     if not pan_col and not code_col:
         # Fallback: try to find any single identifier column
         for col in df.columns:
@@ -160,7 +209,7 @@ async def check_bulk_upload(
     for _, row in df.iterrows():
         pan_val = str(row[pan_col]).strip().upper() if pan_col and pd.notna(row.get(pan_col)) else None
         code_val = str(row[code_col]).strip().upper() if code_col and pd.notna(row.get(code_col)) else None
-        
+
         # Validate: at least one identifier must be present
         if not pan_val and not code_val:
             continue
@@ -170,22 +219,22 @@ async def check_bulk_upload(
         # Validate client code: must be at least 5 chars
         if code_val and len(code_val) < 5:
             code_val = None
-            
+
         if not pan_val and not code_val:
             continue
-            
+
         row_records.append({"pan": pan_val, "client_code": code_val})
-            
+
     valid_rows = len(row_records)
     invalid_rows = len(df) - valid_rows
-    
+
     if valid_rows == 0:
         raise HTTPException(status_code=400, detail="No valid PANs or Client Codes found in the uploaded file.")
 
     # Create UploadBatch
     from db.models import UploadBatch, BatchIPO, BatchStatus, Client
     from queue.worker import process_batch
-    
+
     batch = UploadBatch(
         file_name=file.filename,
         row_count=len(df),
@@ -194,26 +243,26 @@ async def check_bulk_upload(
         status=BatchStatus.Queued
     )
     db.add(batch)
-    db.flush() # flush to get batch.id
-    
+    db.flush()  # flush to get batch.id
+
     # Create BatchIPOs
     for ipo in ipos:
         batch_ipo = BatchIPO(batch_id=batch.id, ipo_id=ipo.id)
         db.add(batch_ipo)
-        
+
     db.commit()
-    
+
     # Pre-fetch or create Client records, keyed by (pan, client_code)
     # Build sets of all PANs and client codes for querying
     all_pans = {r["pan"] for r in row_records if r["pan"]}
     all_codes = {r["client_code"] for r in row_records if r["client_code"]}
-    
+
     existing_clients = []
     if all_pans:
         existing_clients += db.query(Client).filter(Client.pan.in_(all_pans)).all()
     if all_codes:
         existing_clients += db.query(Client).filter(Client.client_code.in_(all_codes)).all()
-    
+
     # Deduplicate
     seen_ids = set()
     unique_clients = []
@@ -221,7 +270,7 @@ async def check_bulk_upload(
         if c.id not in seen_ids:
             seen_ids.add(c.id)
             unique_clients.append(c)
-    
+
     # Build a lookup map: pan -> client, client_code -> client
     client_map = {}
     for c in unique_clients:
@@ -229,19 +278,19 @@ async def check_bulk_upload(
             client_map[("pan", c.pan)] = c
         if c.client_code:
             client_map[("code", c.client_code)] = c
-    
+
     def find_or_create_client(rec):
         """Find existing client or create new one. Also backfill missing identifiers."""
         pan = rec["pan"]
         code = rec["client_code"]
-        
+
         # Try to find by PAN first, then by client_code
         client = None
         if pan:
             client = client_map.get(("pan", pan))
         if not client and code:
             client = client_map.get(("code", code))
-        
+
         if client:
             # Backfill: if the existing client is missing one of the identifiers, add it
             updated = False
@@ -254,7 +303,7 @@ async def check_bulk_upload(
                 client_map[("code", code)] = client
                 updated = True
             return client, False
-        
+
         # Create new client
         name = f"User_{pan or code}"
         new_client = Client(name=name, pan=pan, client_code=code)
@@ -264,7 +313,7 @@ async def check_bulk_upload(
         if code:
             client_map[("code", code)] = new_client
         return new_client, True
-    
+
     new_clients = []
     resolved_clients = []
     for rec in row_records:
@@ -272,7 +321,7 @@ async def check_bulk_upload(
         resolved_clients.append(client)
         if is_new:
             new_clients.append(client)
-    
+
     if new_clients:
         db.bulk_save_objects(new_clients)
         db.commit()
@@ -313,7 +362,7 @@ async def check_bulk_upload(
                 "ipo_name": ipo.name,
                 "registrar_id": registrar_id
             })
-            
+
     # Queue background task
     background_tasks.add_task(process_batch, batch.id, jobs)
 
@@ -324,12 +373,15 @@ async def check_bulk_upload(
         "selected_ipos": [ipo.name for ipo in ipos]
     }
 
-@router.delete("/cache/clear", dependencies=[Depends(verify_admin_key)])
-def clear_allotment_cache(db: Session = Depends(get_db)):
+
+@router.delete("/cache/clear")
+def clear_allotment_cache(db: Session = Depends(get_db), _: str = Depends(require_auth)):
     """Clears all cached allotment results"""
     from db.models import AllotmentResult
     try:
-        updated = db.query(AllotmentResult).filter(AllotmentResult.cache_expires_at > datetime.datetime.utcnow()).update({"cache_expires_at": datetime.datetime.utcnow()})
+        updated = db.query(AllotmentResult).filter(
+            AllotmentResult.cache_expires_at > datetime.datetime.utcnow()
+        ).update({"cache_expires_at": datetime.datetime.utcnow()})
         db.commit()
         return {"status": "success", "message": f"Cleared {updated} cached results."}
     except Exception as e:

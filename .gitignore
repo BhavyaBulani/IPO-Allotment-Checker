@@ -69,6 +69,15 @@ ehthumbs.db
 # ========================
 memory/
 *.log
+
+# Sync-fix scaffolding (already applied and committed)
+AGENT_PROMPT.md
+changes_diff.txt
+git_diff_summary.md
+ipo_sync_changes/
+ipo_sync_fix/
+backend.zip
+IPO_Checker/backend.zip
 *.sqlite3
 captcha_images/
 IPO_Checker/backend/captcha_images/
