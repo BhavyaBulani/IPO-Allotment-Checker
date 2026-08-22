@@ -8,6 +8,11 @@ class RegistrarResult:
         self.captcha_path = captcha_path
 
 class BaseRegistrar(ABC):
+    # True when the implementation talks to a real registrar portal. Mock
+    # implementations leave this False so the orchestrator can refuse them
+    # once APP_ENV=production (never fabricate an allotment verdict).
+    is_live: bool = False
+
     @property
     @abstractmethod
     def name(self) -> str:
