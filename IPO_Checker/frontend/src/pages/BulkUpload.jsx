@@ -57,8 +57,10 @@ export default function BulkUpload() {
           <ArrowLeft size={20} className="mr-2" /> Back to Mode Selection
         </Link>
         
-        <div className="glass-panel rounded-3xl p-8 md:p-10 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+        <div className="glass-panel rounded-3xl p-8 md:p-10 relative">
+          <div className="absolute inset-0 overflow-hidden rounded-3xl pointer-events-none">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+          </div>
           
           <h1 className="text-3xl font-bold text-white mb-2">Bulk Excel Upload</h1>
           <p className="text-slate-400 mb-10">Check multiple clients at once by uploading an Excel file.</p>
