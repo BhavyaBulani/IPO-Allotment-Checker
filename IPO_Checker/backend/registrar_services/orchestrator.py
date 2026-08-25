@@ -2,10 +2,10 @@ import os
 
 from db.models import ResultStatus
 from .base import RegistrarResult
-from .link_intime import LinkIntimeRegistrar
-from .mufg import MufgRegistrar
 from .live.kfin import KFinLiveRegistrar
 from .live.bigshare import BigshareLiveRegistrar
+from .live.link_intime import LinkIntimeLiveRegistrar
+from .live.mufg import MufgIntimeLiveRegistrar
 from .rate_limiter import rate_limiter
 
 APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
@@ -13,14 +13,14 @@ APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
 
 class FallbackOrchestrator:
     def __init__(self):
-        # Registrars 2 (KFin) and 3 (Bigshare) now have real live integrations.
-        # Link Intime (1) and MUFG Intime (4) remain mock and are refused in
-        # production, so a live brokerage never reports a made-up verdict.
+        # All four registrars now have real live integrations. Link Intime (1)
+        # and MUFG Intime (4) are the same company/portal; MUFG reuses the Link
+        # Intime implementation under its own registrar ID.
         self.registrars = {
-            1: LinkIntimeRegistrar(),
+            1: LinkIntimeLiveRegistrar(),
             2: KFinLiveRegistrar(),
             3: BigshareLiveRegistrar(),
-            4: MufgRegistrar(),
+            4: MufgIntimeLiveRegistrar(),
         }
 
     def check_allotment(
