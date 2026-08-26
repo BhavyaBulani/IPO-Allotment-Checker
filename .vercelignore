@@ -1,0 +1,25 @@
+# Large local archives/backups — never upload
+backend.zip
+**/backend.zip
+*.zip
+
+# Python virtualenvs and caches (only backend needs these, and it runs on Render)
+**/venv/
+**/.venv/
+**/__pycache__/
+**/*.pyc
+
+# Node deps and frontend build output (Vercel installs/builds these itself)
+**/node_modules/
+IPO_Checker/frontend/dist/
+IPO_Checker/frontend/dist-ssr/
+
+# Local env files and secrets
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Debug/temp artifacts
+deploy_log.txt
+tools/
