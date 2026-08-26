@@ -16,8 +16,9 @@ from db.session import DATABASE_URL
 # access to the values within the .ini file in use.
 config = context.config
 
-# Set the sqlalchemy.url dynamically
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+# Set the sqlalchemy.url dynamically (must be a string; render without
+# masking the password so Alembic can connect).
+config.set_main_option("sqlalchemy.url", DATABASE_URL.render_as_string(hide_password=False))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

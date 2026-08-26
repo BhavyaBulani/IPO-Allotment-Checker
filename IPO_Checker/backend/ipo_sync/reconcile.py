@@ -21,8 +21,9 @@ from ipo_sync.registrar_map import resolve_registrar_name
 
 # Sources whose single-source presence is still trustworthy enough to
 # auto-publish (no cross-check needed) because they're primary/official
-# rather than scraped/aggregated.
-_AUTHORITATIVE_SOLO_SOURCES = {"Upstox"}
+# rather than scraped/aggregated. NSE qualifies because its per-IPO detail
+# endpoint supplies the registrar straight from the exchange's own records.
+_AUTHORITATIVE_SOLO_SOURCES = {"NSE", "Upstox"}
 
 
 @dataclass

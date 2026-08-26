@@ -2,13 +2,11 @@ import React, { useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, UploadCloud, FileSpreadsheet, X, Loader2, AlertCircle } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
-import IpoMultiSelect from '../components/IpoMultiSelect';
 import api from '../lib/api';
 import clsx from 'clsx';
 
 export default function BulkUpload() {
   const navigate = useNavigate();
-  const [selectedIpos, setSelectedIpos] = useState([]);
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -30,14 +28,13 @@ export default function BulkUpload() {
   });
 
   const handleUpload = async () => {
-    if (!file || selectedIpos.length === 0) return;
+    if (!file) return;
 
     setLoading(true);
     setError(null);
 
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('ipo_ids', selectedIpos.map(i => i.id).join(','));
 
     try {
       const res = await api.post('/check/bulk', formData, {
@@ -67,17 +64,7 @@ export default function BulkUpload() {
 
           <div className="space-y-8 relative z-10">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">1. Select Target IPOs</label>
-              <IpoMultiSelect selectedIpos={selectedIpos} onChange={setSelectedIpos} />
-              {selectedIpos.length > 0 && (
-                <p className="text-xs text-indigo-400 mt-2 ml-1 opacity-80">
-                  You are scheduling {selectedIpos.length} check(s) per row in the uploaded file.
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">2. Upload Client List (.xlsx / .xls)</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Upload Client List (.xlsx / .xls)</label>
               {!file ? (
                 <div 
                   {...getRootProps()} 
@@ -117,7 +104,7 @@ export default function BulkUpload() {
 
             <button 
               onClick={handleUpload}
-              disabled={loading || !file || selectedIpos.length === 0}
+              disabled={loading || !file}
               className="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-4 px-6 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 text-lg"
             >
               {loading ? <Loader2 className="animate-spin" size={24} /> : <UploadCloud size={24} />}

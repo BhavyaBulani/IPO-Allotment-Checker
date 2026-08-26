@@ -14,3 +14,11 @@ class PanCheckRequest(BaseModel):
     identifier: constr(min_length=10, max_length=10) = Field(
         ..., description="Indian PAN (10 characters, e.g. ABCDE1234F)"
     )
+
+
+class IdentifierCheckRequest(BaseModel):
+    """Unified single check: a PAN or Client Code, checked against every validated IPO."""
+
+    identifier: constr(min_length=5, max_length=20) = Field(
+        ..., description="PAN (10 chars, e.g. ABCDE1234F) or Client Code (min 5 chars)"
+    )

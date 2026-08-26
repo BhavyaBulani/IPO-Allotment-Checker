@@ -18,7 +18,7 @@ export default function SingleClientEntry() {
     setResult(null);
 
     try {
-      const res = await api.post('/check/pan', { identifier });
+      const res = await api.post('/check/all', { identifier });
       setResult(res.data);
     } catch (err) {
       setError(err.response?.data?.detail || 'An unexpected error occurred');
@@ -40,29 +40,28 @@ export default function SingleClientEntry() {
           </div>
 
           <h1 className="text-3xl font-bold text-white mb-2">Single Client Check</h1>
-          <p className="text-slate-400 mb-10">Enter a PAN to check allotment status across all current IPOs.</p>
+          <p className="text-slate-400 mb-10">Enter a PAN or Client Code to check allotment status across all current IPOs.</p>
 
           <form onSubmit={handleCheck} className="space-y-6 relative z-10">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">PAN</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2">PAN or Client Code</label>
               <input
                 type="text"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value.toUpperCase())}
-                placeholder="e.g. ABCDE1234F"
-                maxLength={10}
-                className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner tracking-widest font-mono"
+                placeholder="e.g. ABCDE1234F or RC12345"
+                className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner font-mono"
                 required
               />
             </div>
 
             <button
               type="submit"
-              disabled={loading || identifier.length !== 10}
+              disabled={loading || identifier.length < 5}
               className="w-full mt-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-6 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20"
             >
               {loading ? <Loader2 className="animate-spin" size={20} /> : <Search size={20} />}
-              {loading ? 'Checking...' : 'Check Allotment Status'}
+              {loading ? 'Checking...' : 'Check Status'}
             </button>
           </form>
 

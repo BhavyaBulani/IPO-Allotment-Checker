@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from api.deps import require_auth
 from db.models import IPO, Registrar
 from db.session import get_db
-from schemas.input import PanCheckRequest, SingleCheckRequest
+from schemas.input import PanCheckRequest, SingleCheckRequest, IdentifierCheckRequest
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +110,55 @@ def check_single_pan(request: PanCheckRequest, db: Session = Depends(get_db)):
     }
 
 
+@router.post("/all")
+def check_all_identifier(request: IdentifierCheckRequest, db: Session = Depends(get_db)):
+    """Check a PAN or Client Code against every validated IPO (no selection needed)."""
+    identifier = request.identifier.strip().upper()
+    is_pan = validate_pan(identifier)
+
+    if not is_pan and len(identifier) < 5:
+        raise HTTPException(
+            status_code=400,
+            detail="Client Code must be at least 5 characters.",
+        )
+
+    pan_value = identifier if is_pan else None
+    client_code_value = identifier if not is_pan else None
+
+    # Cross-reference the missing identifier from previously imported clients.
+    from db.models import Client
+    if is_pan:
+        existing = db.query(Client).filter(Client.pan == identifier).first()
+        if existing and existing.client_code:
+            client_code_value = existing.client_code
+    else:
+        existing = db.query(Client).filter(Client.client_code == identifier).first()
+        if existing and existing.pan:
+            pan_value = existing.pan
+
+    ipos = db.query(IPO).filter(IPO.validated == True).all()
+    if not ipos:
+        raise HTTPException(status_code=404, detail="No validated IPOs are available to check.")
+
+    from registrar_services.orchestrator import orchestrator
+
+    active_registrars = db.query(Registrar).filter(Registrar.active == True).all()
+    registrar_ids = [r.id for r in active_registrars] if active_registrars else [1]
+
+    results_detail = [
+        _run_check(orchestrator, db, pan_value, client_code_value, ipo, registrar_ids)
+        for ipo in ipos
+    ]
+
+    return {
+        "status": "success",
+        "message": f"Checked against {len(ipos)} IPO(s).",
+        "identifier_type": "PAN" if is_pan else "Client Code",
+        "ipos": [ipo.name for ipo in ipos],
+        "results": results_detail,
+    }
+
+
 @router.post("/single")
 def check_single_client(request: SingleCheckRequest, db: Session = Depends(get_db)):
     # Validate IPOs
@@ -157,20 +206,26 @@ def check_single_client(request: SingleCheckRequest, db: Session = Depends(get_d
 async def check_bulk_upload(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    ipo_ids: str = Form(...),
+    ipo_ids: str = Form(""),
     db: Session = Depends(get_db),
 ):
     if not (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
         raise HTTPException(status_code=400, detail="Invalid file type. Only .xlsx and .xls are supported.")
 
-    try:
-        ipo_id_list = [int(i) for i in ipo_ids.split(",") if i.strip()]
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid IPO IDs format.")
+    if ipo_ids.strip():
+        try:
+            ipo_id_list = [int(i) for i in ipo_ids.split(",") if i.strip()]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid IPO IDs format.")
 
-    ipos = db.query(IPO).filter(IPO.id.in_(ipo_id_list), IPO.validated == True).all()
-    if len(ipos) != len(ipo_id_list) or len(ipos) == 0:
-        raise HTTPException(status_code=400, detail="Invalid IPO selection.")
+        ipos = db.query(IPO).filter(IPO.id.in_(ipo_id_list), IPO.validated == True).all()
+        if len(ipos) != len(ipo_id_list) or len(ipos) == 0:
+            raise HTTPException(status_code=400, detail="Invalid IPO selection.")
+    else:
+        # No selection means "check every validated IPO".
+        ipos = db.query(IPO).filter(IPO.validated == True).all()
+        if not ipos:
+            raise HTTPException(status_code=400, detail="No validated IPOs are available to check.")
 
     content = await file.read()
     if len(content) > MAX_UPLOAD_BYTES:

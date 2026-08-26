@@ -61,6 +61,46 @@ def _normalize_name_for_match(value: str) -> str:
     return re.sub(r"\s+", " ", value or "").strip().lower()
 
 
+def _parse_date(value) -> datetime.datetime | None:
+    """Coerce a source date (str / datetime / date) into a naive datetime.
+
+    NSE/BSE return dates as free-text strings (e.g. '28-Aug-2026'); the
+    model columns are DateTime, and MySQL rejects the raw string. If the
+    value can't be parsed we return None (store NULL) rather than crash the
+    whole sync on one malformed row.
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime.datetime):
+        return value
+    if isinstance(value, datetime.date):
+        return datetime.datetime(value.year, value.month, value.day)
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    for fmt in (
+        "%d-%b-%Y",           # 28-Aug-2026
+        "%d %b %Y",           # 28 Aug 2026
+        "%d/%m/%Y",           # 28/08/2026
+        "%d-%m-%Y",           # 28-08-2026
+        "%Y-%m-%d",           # 2026-08-28
+        "%Y/%m/%d",           # 2026/08/28
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+    ):
+        try:
+            return datetime.datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+
+    try:
+        return datetime.datetime.fromisoformat(text.replace("Z", "+00:00")).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
 def _resolve_registrar_id(db, registrar_name: str | None) -> int | None:
     if not registrar_name:
         return None
@@ -80,6 +120,8 @@ def _upsert(db, record: ReconciledIPO, existing_by_name: dict[str, IPO]) -> str:
     status_enum = _STATUS_MAP.get(record.status, IPOStatus.Upcoming)
     is_valid_shape = is_sane_ipo(record.name, status_enum)
     final_validated = record.validated and is_valid_shape
+    open_dt = _parse_date(record.open_date)
+    close_dt = _parse_date(record.close_date)
 
     registrar_id = _resolve_registrar_id(db, record.registrar_name)
     if record.registrar_name and registrar_id is None:
@@ -99,11 +141,11 @@ def _upsert(db, record: ReconciledIPO, existing_by_name: dict[str, IPO]) -> str:
         if existing.status != status_enum:
             existing.status = status_enum
             changed = True
-        if record.open_date and existing.open_date != record.open_date:
-            existing.open_date = record.open_date
+        if open_dt is not None and existing.open_date != open_dt:
+            existing.open_date = open_dt
             changed = True
-        if record.close_date and existing.close_date != record.close_date:
-            existing.close_date = record.close_date
+        if close_dt is not None and existing.close_date != close_dt:
+            existing.close_date = close_dt
             changed = True
         if existing.registrar_id != registrar_id:
             existing.registrar_id = registrar_id
@@ -122,8 +164,8 @@ def _upsert(db, record: ReconciledIPO, existing_by_name: dict[str, IPO]) -> str:
         name=record.name,
         status=status_enum,
         source="+".join(record.sources),
-        open_date=record.open_date,
-        close_date=record.close_date,
+        open_date=open_dt,
+        close_date=close_dt,
         synced_at=datetime.datetime.utcnow(),
         auto_detected=True,
         validated=final_validated,

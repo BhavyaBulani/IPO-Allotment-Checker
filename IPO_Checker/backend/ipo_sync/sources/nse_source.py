@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 _HOMEPAGE_URL = "https://www.nseindia.com"
 _IPO_URL = "https://www.nseindia.com/api/all-upcoming-issues?category=ipo"
+_DETAIL_URL = "https://www.nseindia.com/api/ipo-detail?symbol={symbol}"
+_REGISTRAR_TITLE = "Name of the Registrar"
 
 _HEADERS = {
     "User-Agent": (
@@ -43,6 +45,7 @@ _REGISTRAR_KEYS = ["registrar", "registrarName", "issueRegistrar"]
 
 _STATUS_NORMALIZE = {
     "open": "Open",
+    "active": "Open",
     "forthcoming": "Upcoming",
     "upcoming": "Upcoming",
     "closed": "Closed",
@@ -62,6 +65,32 @@ def _normalize_status(raw_status) -> str | None:
     if not raw_status:
         return None
     return _STATUS_NORMALIZE.get(str(raw_status).strip().lower())
+
+
+def _fetch_registrar_name(session: requests.Session, symbol) -> str | None:
+    """Fetch the registrar for one symbol from NSE's per-IPO detail endpoint.
+
+    The listing endpoint does not carry a registrar field, but the detail
+    endpoint (same official exchange, same session) exposes it under
+    ``issueInfo.dataList`` as {title: "Name of the Registrar", value: ...}.
+    Returns None on any failure so the caller holds the IPO for review rather
+    than guessing a registrar.
+    """
+    if not symbol:
+        return None
+    try:
+        resp = session.get(_DETAIL_URL.format(symbol=str(symbol)), timeout=15)
+        if resp.status_code != 200:
+            return None
+        payload = resp.json()
+        data_list = (payload.get("issueInfo") or {}).get("dataList") or []
+        for item in data_list:
+            if isinstance(item, dict) and (item.get("title") or "") == _REGISTRAR_TITLE:
+                value = item.get("value")
+                return str(value).strip() if value else None
+    except (requests.RequestException, ValueError, TypeError):
+        logger.debug("NSE detail registrar fetch failed for %s", symbol, exc_info=True)
+    return None
 
 
 def fetch_nse_ipos() -> list[dict]:
@@ -107,12 +136,14 @@ def fetch_nse_ipos() -> list[dict]:
         if not name or not status:
             logger.debug("Skipping unparseable NSE row: %r", row)
             continue
+        symbol = row.get("symbol")
+        registrar_name = _first(row, _REGISTRAR_KEYS) or _fetch_registrar_name(session, symbol)
         parsed.append({
             "name": str(name).strip(),
             "status": status,
             "open_date": _first(row, _OPEN_DATE_KEYS),
             "close_date": _first(row, _CLOSE_DATE_KEYS),
-            "registrar_name": _first(row, _REGISTRAR_KEYS),
+            "registrar_name": registrar_name,
         })
 
     logger.info("NSE source returned %d parseable IPO rows", len(parsed))

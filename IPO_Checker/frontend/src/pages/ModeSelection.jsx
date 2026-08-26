@@ -21,7 +21,7 @@ export default function ModeSelection() {
             <User size={36} className="text-indigo-400" />
           </div>
           <h2 className="text-2xl font-bold text-white mb-3">Single Client Check</h2>
-          <p className="text-slate-400 mb-8 flex-grow">Enter a single PAN or Client Code to instantly verify allotment status across selected IPOs.</p>
+          <p className="text-slate-400 mb-8 flex-grow">Enter a single PAN or Client Code to instantly verify allotment status across all current IPOs.</p>
           <div className="flex items-center text-indigo-400 font-semibold group-hover:translate-x-1 transition-transform">
             Proceed <ArrowRight size={18} className="ml-2" />
           </div>
@@ -33,7 +33,7 @@ export default function ModeSelection() {
             <FileSpreadsheet size={36} className="text-emerald-400" />
           </div>
           <h2 className="text-2xl font-bold text-white mb-3">Bulk Excel Upload</h2>
-          <p className="text-slate-400 mb-8 flex-grow">Upload a .xlsx file of clients to process thousands of checks in parallel automatically.</p>
+          <p className="text-slate-400 mb-8 flex-grow">Upload a .xlsx file of clients to process checks across all current IPOs automatically.</p>
           <div className="flex items-center text-emerald-400 font-semibold group-hover:translate-x-1 transition-transform">
             Proceed <ArrowRight size={18} className="ml-2" />
           </div>
