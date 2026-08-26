@@ -35,6 +35,7 @@ from db.models import IPO, IPOStatus, Registrar
 from ipo_sync.sources.nse_source import fetch_nse_ipos
 from ipo_sync.sources.bse_source import fetch_bse_ipos
 from ipo_sync.sources.upstox_source import fetch_upstox_ipos
+from ipo_sync.sources.registrar_dropdown_source import fetch_registrar_checkable_ipos
 from ipo_sync.reconcile import reconcile, ReconciledIPO
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,57 @@ def is_sane_ipo(name: str, status: IPOStatus) -> bool:
 
 def _normalize_name_for_match(value: str) -> str:
     return re.sub(r"\s+", " ", value or "").strip().lower()
+
+
+def _normalize_name_loose(value: str) -> str:
+    """Name key that ignores legal-suffix differences (Ltd/Pvt/Limited)."""
+    value = re.sub(r"\b(limited|ltd|private|pvt)\b\.?", "", value or "", flags=re.I)
+    return re.sub(r"\s+", " ", value).strip().lower()
+
+
+# Link Intime and MUFG Intime are the same portal (MUFG is the renamed
+# Link Intime), so an IPO mapped to either registrar is checkable there.
+_LINK_MUFG_PAIR = {"Link Intime", "MUFG Intime"}
+
+
+def _registrars_compatible(a: str | None, b: str | None) -> bool:
+    """True when two canonical registrar names describe the same portal."""
+    if not a or not b:
+        return True
+    if a == b:
+        return True
+    return {a, b} == _LINK_MUFG_PAIR
+
+
+def _merge_checkable(records: list[ReconciledIPO], dropdown_rows: list[dict]) -> list[ReconciledIPO]:
+    """Promote exchange records whose name is live on their registrar portal.
+
+    A name present in its registrar's allotment dropdown is the authoritative
+    "results are live" signal, so it promotes the status to Allotment Announced
+    and clears validation. Promotion is additive and name-matched only: we
+    never create new IPO rows from the registrar list (those lists also carry
+    NCDs/INVITs/REITs/SMEs), and a name not in the exchange feeds simply gets
+    no promotion — fail in the safe direction.
+
+    Pure function (no DB) so the promotion rule can be unit-tested.
+    """
+    checkable_by_name: dict[str, dict] = {}
+    for row in dropdown_rows:
+        key = _normalize_name_loose(row.get("name"))
+        if key:
+            checkable_by_name[key] = row
+
+    merged: list[ReconciledIPO] = []
+    for record in records:
+        key = _normalize_name_loose(record.name)
+        checkable = checkable_by_name.get(key)
+        if checkable and _registrars_compatible(record.registrar_name, checkable.get("registrar_name")):
+            record.status = "Allotment Announced"
+            if "registrar-dropdown" not in record.sources:
+                record.sources = list(record.sources) + ["registrar-dropdown"]
+            record.validated = True
+        merged.append(record)
+    return merged
 
 
 def _parse_date(value) -> datetime.datetime | None:
@@ -176,13 +228,24 @@ def _upsert(db, record: ReconciledIPO, existing_by_name: dict[str, IPO]) -> str:
     return "added"
 
 
-def sync_ipos() -> dict:
+def sync_ipos(include_registrar_dropdown: bool | None = None) -> dict:
     """
-    Main entry point. Fetches NSE + BSE, reconciles, upserts.
-    Returns a summary dict: added, updated, held_for_review, source.
+    Main entry point. Fetches NSE + BSE (+ Upstox), reconciles, and — when
+    enabled — promotes IPOs whose allotment is live on their registrar portal
+    (the authoritative "Allotment Announced" signal).
+
+    ``include_registrar_dropdown`` defaults to the
+    ENABLE_REGISTRAR_DROPDOWN_DISCOVERY env var (default off) so the 4-hour
+    HTTP sync stays fast; the nightly job passes True to run the Playwright
+    dropdown scan.
+
     Never raises — callers (startup hook, scheduled job, admin endpoint)
     all expect a dict back even on partial/total failure.
     """
+    if include_registrar_dropdown is None:
+        raw = os.environ.get("ENABLE_REGISTRAR_DROPDOWN_DISCOVERY", "0")
+        include_registrar_dropdown = raw.strip().lower() in {"1", "true", "yes", "on"}
+
     try:
         nse_rows = fetch_nse_ipos()
     except Exception as exc:
@@ -201,11 +264,20 @@ def sync_ipos() -> dict:
         logger.error("Upstox fetch raised unexpectedly: %s", exc, exc_info=True)
         upstox_rows = []
 
-    if not nse_rows and not bse_rows and not upstox_rows:
-        logger.warning("NSE, BSE, and Upstox were all unreachable this run. Database left unchanged.")
+    dropdown_rows = []
+    if include_registrar_dropdown:
+        try:
+            dropdown_rows = fetch_registrar_checkable_ipos()
+        except Exception as exc:
+            logger.error("Registrar dropdown discovery raised unexpectedly: %s", exc, exc_info=True)
+            dropdown_rows = []
+
+    if not nse_rows and not bse_rows and not upstox_rows and not dropdown_rows:
+        logger.warning("NSE, BSE, Upstox, and registrar dropdowns were all unreachable this run. Database left unchanged.")
         return {"added": 0, "updated": 0, "held_for_review": 0, "source": "none"}
 
-    reconciled = reconcile(nse_rows, bse_rows, upstox_rows)
+    records = reconcile(nse_rows, bse_rows, upstox_rows)
+    records = _merge_checkable(records, dropdown_rows)
 
     db = SessionLocal()
     added = updated = held_for_review = 0
@@ -213,7 +285,7 @@ def sync_ipos() -> dict:
         existing_by_name = {
             _normalize_name_for_match(ipo.name): ipo for ipo in db.query(IPO).all()
         }
-        for record in reconciled:
+        for record in records:
             outcome = _upsert(db, record, existing_by_name)
             if outcome == "added":
                 added += 1
@@ -230,7 +302,12 @@ def sync_ipos() -> dict:
         db.close()
 
     sources_used = "+".join(
-        s for s, rows in (("NSE", nse_rows), ("BSE", bse_rows), ("Upstox", upstox_rows)) if rows
+        s for s, rows in (
+            ("NSE", nse_rows),
+            ("BSE", bse_rows),
+            ("Upstox", upstox_rows),
+            ("registrar-dropdown", dropdown_rows),
+        ) if rows
     ) or "none"
 
     logger.info(

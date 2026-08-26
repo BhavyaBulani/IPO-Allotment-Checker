@@ -59,6 +59,14 @@ services:
         value: "30000"
       - key: LIVE_ACTION_TIMEOUT_MS
         value: "15000"
+      # Registrar dropdown discovery (Playwright) — normally run only by
+      # jobs/sync_job.py nightly. Keep "0" so the 4-hour HTTP sync in
+      # main.py stays fast; set "1" only if you want the periodic sync to
+      # include the heavier Playwright dropdown scan as well.
+      - key: ENABLE_REGISTRAR_DROPDOWN_DISCOVERY
+        value: "0"
+      - key: REGISTRAR_DROPDOWN_HEADLESS
+        value: "1"
       - key: TWOCAPTCHA_API_KEY
         sync: false
       - key: CAPTCHA_AUTO_SOLVER
