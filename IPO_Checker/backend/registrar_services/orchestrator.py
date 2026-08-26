@@ -6,6 +6,9 @@ from .live.kfin import KFinLiveRegistrar
 from .live.bigshare import BigshareLiveRegistrar
 from .live.link_intime import LinkIntimeLiveRegistrar
 from .live.mufg import MufgIntimeLiveRegistrar
+from .live.mas import MasLiveRegistrar
+from .live.alankit import AlankitLiveRegistrar
+from .live.purva import PurvaLiveRegistrar
 from .rate_limiter import rate_limiter
 
 APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
@@ -13,14 +16,18 @@ APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
 
 class FallbackOrchestrator:
     def __init__(self):
-        # All four registrars now have real live integrations. Link Intime (1)
-        # and MUFG Intime (4) are the same company/portal; MUFG reuses the Link
-        # Intime implementation under its own registrar ID.
+        # Registrars with verified live integrations. Link Intime (1) and
+        # MUFG Intime (4) are the same company/portal; MUFG reuses the Link
+        # Intime implementation under its own registrar ID. MAS (5) checks the
+        # one issue its portal currently serves; see live/mas.py.
         self.registrars = {
             1: LinkIntimeLiveRegistrar(),
             2: KFinLiveRegistrar(),
             3: BigshareLiveRegistrar(),
             4: MufgIntimeLiveRegistrar(),
+            5: MasLiveRegistrar(),
+            7: AlankitLiveRegistrar(),
+            8: PurvaLiveRegistrar(),
         }
 
     def check_allotment(

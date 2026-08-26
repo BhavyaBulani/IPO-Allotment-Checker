@@ -1,0 +1,71 @@
+# Render Blueprint for the IPO Allotment Checker backend (FastAPI + Playwright + MySQL).
+#
+# Deploy via Render dashboard -> "New +" -> "Blueprint" (point it at this repo).
+# This makes the backend reproducible: it installs Playwright's Chromium at
+# build time and starts uvicorn on Render's injected $PORT.
+#
+# NOTE: If you already have a live service + database on Render and just want to
+# reuse them, skip this blueprint and instead set the env vars below on the
+# existing service (Settings -> Environment) and make sure its
+# Build Command / Start Command match what's listed here.
+
+services:
+  - type: web
+    name: ipo-checker-api          # becomes https://ipo-checker-api.onrender.com
+    runtime: python
+    plan: free
+    rootDir: IPO_Checker/backend
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt && playwright install --with-deps chromium
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true        # random 64-char hex on first deploy
+      - key: APP_PASSWORD
+        value: change-me-to-a-strong-shared-password
+        sync: false                # set manually; not overwritten on re-sync
+      - key: CORS_ORIGINS
+        value: https://YOUR-VERCEL-APP.vercel.app
+        sync: false                # update after the Vercel frontend is deployed
+      # --- MySQL (managed database below) ---
+      - key: MYSQL_HOST
+        fromDatabase:
+          name: ipo-checker-db
+          property: host
+      - key: MYSQL_PORT
+        fromDatabase:
+          name: ipo-checker-db
+          property: port
+      - key: MYSQL_USER
+        fromDatabase:
+          name: ipo-checker-db
+          property: user
+      - key: MYSQL_PASSWORD
+        fromDatabase:
+          name: ipo-checker-db
+          property: password
+      - key: MYSQL_DATABASE
+        fromDatabase:
+          name: ipo-checker-db
+          property: database
+      - key: MYSQL_SSL_MODE
+        value: REQUIRED
+      # --- Live registrar automation ---
+      - key: LIVE_REGISTRAR_HEADLESS
+        value: "1"
+      - key: LIVE_NAV_TIMEOUT_MS
+        value: "30000"
+      - key: LIVE_ACTION_TIMEOUT_MS
+        value: "15000"
+      - key: TWOCAPTCHA_API_KEY
+        sync: false
+      - key: CAPTCHA_AUTO_SOLVER
+        value: "0"
+
+databases:
+  - name: ipo-checker-db
+    plan: free                   # Render MySQL may require a paid plan; reuse an
+    databaseName: ipo_checker    # existing DB instead by setting MYSQL_* directly.
+    user: ipo_user

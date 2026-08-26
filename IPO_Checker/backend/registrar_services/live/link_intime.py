@@ -193,9 +193,17 @@ class LinkIntimeLiveRegistrar(BaseLiveRegistrar):
                 msg or f"{self.label} returned an unexpected server message.",
             )
 
+        # Only a genuinely empty <NewDataSet /> means "no record / not allotted".
+        # Any other unrecognized shape is a site change we must not guess at.
+        if len(root) == 0:
+            return RegistrarResult(
+                ResultStatus.Not_Allotted,
+                f"Record not found in {self.label}'s allotment database (no allotment).",
+            )
+
         return RegistrarResult(
-            ResultStatus.Not_Allotted,
-            f"Record not found in {self.label}'s allotment database (no allotment).",
+            ResultStatus.Website_Error,
+            f"Unexpected {self.label} response XML (no Table/Table1 element).",
         )
 
     @staticmethod

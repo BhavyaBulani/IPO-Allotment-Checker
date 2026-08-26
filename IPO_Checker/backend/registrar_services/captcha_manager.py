@@ -1,3 +1,4 @@
+import os
 import uuid
 import time
 from typing import Dict, Optional
@@ -9,8 +10,13 @@ class CaptchaManager:
     def __init__(self):
         # Store pending captchas in memory: { captcha_id: {"image": bytes, "solution": str, "status": "pending|solved|failed"} }
         self.pending_captchas: Dict[str, dict] = {}
-        # Simple configuration
-        self.use_auto_solver = False
+
+    @property
+    def use_auto_solver(self) -> bool:
+        """True when CAPTCHA_AUTO_SOLVER is enabled in the environment."""
+        return os.environ.get("CAPTCHA_AUTO_SOLVER", "").strip().lower() in {
+            "1", "true", "yes", "on",
+        }
 
     def request_solve(self, image_bytes: bytes, context: dict = None) -> Optional[str]:
         if self.use_auto_solver:
