@@ -59,12 +59,13 @@ services:
         value: "30000"
       - key: LIVE_ACTION_TIMEOUT_MS
         value: "15000"
-      # Registrar dropdown discovery (Playwright) — normally run only by
-      # jobs/sync_job.py nightly. Keep "0" so the 4-hour HTTP sync in
-      # main.py stays fast; set "1" only if you want the periodic sync to
-      # include the heavier Playwright dropdown scan as well.
+      # Registrar dropdown discovery (Playwright) — the daily in-app scan in
+      # main.py that detects which IPOs have live allotment results. Set "1"
+      # to enable it (recommended). It runs once shortly after startup and
+      # then every 24h, kept alive by the service's keep-alive pings. No
+      # separate Render cron service is required.
       - key: ENABLE_REGISTRAR_DROPDOWN_DISCOVERY
-        value: "0"
+        value: "1"
       - key: REGISTRAR_DROPDOWN_HEADLESS
         value: "1"
       - key: TWOCAPTCHA_API_KEY

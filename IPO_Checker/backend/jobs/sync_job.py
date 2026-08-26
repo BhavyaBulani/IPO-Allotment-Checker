@@ -23,9 +23,10 @@ def run_sync():
     logger.info("Starting scheduled IPO sync job...")
     try:
         from ipo_sync.auto_detect import sync_ipos
-        # The nightly job is the one place we run the Playwright registrar
-        # dropdown scan: it's the authoritative "Allotment Announced" signal
-        # and is too heavy for the 4-hour HTTP sync in main.py.
+        # jobs/sync_job.py can still be run manually (or via an external
+        # scheduler) to force a dropdown scan. In production, main.py already
+        # runs this daily when ENABLE_REGISTRAR_DROPDOWN_DISCOVERY=1, so a
+        # separate Render cron service is not required.
         result = sync_ipos(include_registrar_dropdown=True)
         logger.info(
             f"IPO sync job completed. "

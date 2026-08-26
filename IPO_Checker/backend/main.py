@@ -14,6 +14,16 @@ logger = logging.getLogger(__name__)
 # Sync interval in seconds (4 hours)
 IPO_SYNC_INTERVAL_SECONDS = 4 * 60 * 60
 
+# Registrar dropdown discovery interval (24 hours). This is the heavier
+# Playwright scan that detects which IPOs have live allotment results; it
+# runs as a separate, slower loop so the 4-hour HTTP sync stays fast.
+REGISTRAR_DROPDOWN_SYNC_INTERVAL_SECONDS = 24 * 60 * 60
+
+
+def _registrar_dropdown_enabled() -> bool:
+    raw = os.environ.get("ENABLE_REGISTRAR_DROPDOWN_DISCOVERY", "0")
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
 
 async def _periodic_ipo_sync():
     """Background task that syncs IPOs every IPO_SYNC_INTERVAL_SECONDS."""
@@ -33,6 +43,30 @@ async def _periodic_ipo_sync():
             logger.error(f"Periodic IPO sync failed: {e}", exc_info=True)
 
 
+async def _periodic_registrar_dropdown_sync():
+    """Background task that scans registrar dropdowns once a day.
+
+    Runs the first scan shortly after startup (so a fresh deploy doesn't
+    have to wait 24 hours), then every 24 hours. The service's keep-alive
+    pings keep this loop running; no separate Render cron service is needed.
+    """
+    # Small delay so the first scan doesn't compete with the startup sync.
+    await asyncio.sleep(60)
+    while True:
+        logger.info("Registrar dropdown sync triggered...")
+        try:
+            from ipo_sync.auto_detect import sync_ipos
+            result = await asyncio.to_thread(sync_ipos, include_registrar_dropdown=True)
+            logger.info(
+                f"Registrar dropdown sync complete. "
+                f"Added: {result['added']}, Updated: {result['updated']}, "
+                f"Source: {result['source']}"
+            )
+        except Exception as e:
+            logger.error(f"Registrar dropdown sync failed: {e}", exc_info=True)
+        await asyncio.sleep(REGISTRAR_DROPDOWN_SYNC_INTERVAL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events for the application."""
@@ -48,6 +82,14 @@ async def lifespan(app: FastAPI):
     # Start the periodic sync background task
     sync_task = asyncio.create_task(_periodic_ipo_sync())
     logger.info(f"Periodic IPO sync scheduled every {IPO_SYNC_INTERVAL_SECONDS // 3600} hours.")
+
+    # Start the daily registrar dropdown scan if enabled.
+    dropdown_task = None
+    if _registrar_dropdown_enabled():
+        dropdown_task = asyncio.create_task(_periodic_registrar_dropdown_sync())
+        logger.info("Registrar dropdown sync scheduled daily (first run in 60s).")
+    else:
+        logger.info("Registrar dropdown sync is disabled (ENABLE_REGISTRAR_DROPDOWN_DISCOVERY=0).")
     
     yield  # Application runs here
     
@@ -57,6 +99,12 @@ async def lifespan(app: FastAPI):
         await sync_task
     except asyncio.CancelledError:
         pass
+    if dropdown_task is not None:
+        dropdown_task.cancel()
+        try:
+            await dropdown_task
+        except asyncio.CancelledError:
+            pass
     logger.info("Application shutting down.")
 
 app = FastAPI(title="IPO Allotment Verification API", lifespan=lifespan)
