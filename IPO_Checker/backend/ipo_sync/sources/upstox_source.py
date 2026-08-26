@@ -30,7 +30,8 @@ _STATUS_MAP = {
     "upcoming": "Upcoming",
     "open": "Open",
     "closed": "Closed",
-    "listed": "Closed",
+    # "listed" means trading has begun, i.e. allotment is final and checkable.
+    "listed": "Allotment Announced",
 }
 
 

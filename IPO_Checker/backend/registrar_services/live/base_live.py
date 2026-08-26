@@ -17,6 +17,26 @@ from ..base import BaseRegistrar, RegistrarResult
 logger = logging.getLogger(__name__)
 
 
+def normalize_pan(value) -> str | None:
+    """Upper-case, whitespace-trimmed PAN, or None when absent/empty."""
+    if value is None:
+        return None
+    text = str(value).strip().upper()
+    return text or None
+
+
+def find_pan_field(mapping) -> str | None:
+    """Return the first non-empty PAN-looking value in a dict, or None."""
+    if not isinstance(mapping, dict):
+        return None
+    for key, value in mapping.items():
+        if "PAN" in str(key).upper():
+            pan = normalize_pan(value)
+            if pan:
+                return pan
+    return None
+
+
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.environ.get(name)
     if raw is None:

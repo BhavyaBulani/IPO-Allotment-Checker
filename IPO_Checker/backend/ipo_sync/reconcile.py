@@ -29,7 +29,7 @@ _AUTHORITATIVE_SOLO_SOURCES = {"NSE", "Upstox"}
 @dataclass
 class ReconciledIPO:
     name: str
-    status: str  # "Open" | "Upcoming" | "Closed"
+    status: str  # "Open" | "Upcoming" | "Closed" | "Allotment Announced"
     open_date: object
     close_date: object
     registrar_name: str | None

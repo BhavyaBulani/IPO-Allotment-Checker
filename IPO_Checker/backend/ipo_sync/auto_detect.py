@@ -43,6 +43,7 @@ _STATUS_MAP = {
     "Open": IPOStatus.Open,
     "Upcoming": IPOStatus.Upcoming,
     "Closed": IPOStatus.Closed,
+    "Allotment Announced": IPOStatus.Allotment_Announced,
 }
 
 

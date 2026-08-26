@@ -8,7 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from sqlalchemy.orm import Session
 
 from api.deps import require_auth
-from db.models import IPO, Registrar
+from db.models import IPO, IPOStatus, Registrar
 from db.session import get_db
 from schemas.input import PanCheckRequest, SingleCheckRequest, IdentifierCheckRequest
 
@@ -23,6 +23,26 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 def validate_pan(pan: str) -> bool:
     """Validate standard Indian PAN format."""
     return bool(re.match(r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$', pan.upper()))
+
+
+# Only these stages have a final allotment list to query. Checking a PAN
+# against an IPO that is still Open/Upcoming yields a fabricated "Not
+# Allotted" (the registrar simply has no record yet), so we never do it.
+_CHECKABLE_STATUSES = (IPOStatus.Allotment_Announced,)
+
+_NO_CHECKABLE_IPOS_MSG = (
+    "No IPOs with an announced allotment are available to check right now. "
+    "Allotment results only exist after a company's allotment is announced."
+)
+
+
+def _checkable_ipos(db):
+    """Return only IPOs whose allotment is announced (a real verdict exists)."""
+    return (
+        db.query(IPO)
+        .filter(IPO.validated == True, IPO.status.in_(_CHECKABLE_STATUSES))
+        .all()
+    )
 
 
 def resolve_registrar_id(ipo: IPO, active_registrar_ids: list[int]) -> int | None:
@@ -84,9 +104,9 @@ def check_single_pan(request: PanCheckRequest, db: Session = Depends(get_db)):
             detail="Invalid PAN format. Expected 10 characters: 5 letters, 4 digits, 1 letter.",
         )
 
-    ipos = db.query(IPO).filter(IPO.validated == True).all()
+    ipos = _checkable_ipos(db)
     if not ipos:
-        raise HTTPException(status_code=404, detail="No validated IPOs are available to check.")
+        raise HTTPException(status_code=404, detail=_NO_CHECKABLE_IPOS_MSG)
 
     from db.models import Client
     from registrar_services.orchestrator import orchestrator
@@ -136,9 +156,9 @@ def check_all_identifier(request: IdentifierCheckRequest, db: Session = Depends(
         if existing and existing.pan:
             pan_value = existing.pan
 
-    ipos = db.query(IPO).filter(IPO.validated == True).all()
+    ipos = _checkable_ipos(db)
     if not ipos:
-        raise HTTPException(status_code=404, detail="No validated IPOs are available to check.")
+        raise HTTPException(status_code=404, detail=_NO_CHECKABLE_IPOS_MSG)
 
     from registrar_services.orchestrator import orchestrator
 
@@ -161,10 +181,17 @@ def check_all_identifier(request: IdentifierCheckRequest, db: Session = Depends(
 
 @router.post("/single")
 def check_single_client(request: SingleCheckRequest, db: Session = Depends(get_db)):
-    # Validate IPOs
-    ipos = db.query(IPO).filter(IPO.id.in_(request.ipo_ids), IPO.validated == True).all()
+    # Validate IPOs — only IPOs with an announced allotment can be checked.
+    ipos = db.query(IPO).filter(
+        IPO.id.in_(request.ipo_ids),
+        IPO.validated == True,
+        IPO.status.in_(_CHECKABLE_STATUSES),
+    ).all()
     if len(ipos) != len(request.ipo_ids):
-        raise HTTPException(status_code=400, detail="One or more selected IPOs are invalid or not found.")
+        raise HTTPException(
+            status_code=400,
+            detail="One or more selected IPOs are invalid, not found, or their allotment has not been announced.",
+        )
 
     # Determine if the input is a PAN or Client Code
     is_pan = validate_pan(request.identifier)
@@ -218,14 +245,18 @@ async def check_bulk_upload(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid IPO IDs format.")
 
-        ipos = db.query(IPO).filter(IPO.id.in_(ipo_id_list), IPO.validated == True).all()
+        ipos = db.query(IPO).filter(
+            IPO.id.in_(ipo_id_list),
+            IPO.validated == True,
+            IPO.status.in_(_CHECKABLE_STATUSES),
+        ).all()
         if len(ipos) != len(ipo_id_list) or len(ipos) == 0:
-            raise HTTPException(status_code=400, detail="Invalid IPO selection.")
+            raise HTTPException(status_code=400, detail="Invalid IPO selection: one or more IPOs have no announced allotment to check.")
     else:
-        # No selection means "check every validated IPO".
-        ipos = db.query(IPO).filter(IPO.validated == True).all()
+        # No selection means "check every IPO with an announced allotment".
+        ipos = _checkable_ipos(db)
         if not ipos:
-            raise HTTPException(status_code=400, detail="No validated IPOs are available to check.")
+            raise HTTPException(status_code=400, detail=_NO_CHECKABLE_IPOS_MSG)
 
     content = await file.read()
     if len(content) > MAX_UPLOAD_BYTES:

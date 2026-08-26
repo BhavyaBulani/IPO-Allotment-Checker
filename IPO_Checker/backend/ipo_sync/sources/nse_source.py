@@ -49,7 +49,10 @@ _STATUS_NORMALIZE = {
     "forthcoming": "Upcoming",
     "upcoming": "Upcoming",
     "closed": "Closed",
-    "listed": "Closed",
+    # "listed" means trading has begun, i.e. allotment is final and the
+    # result is available on the registrar portal — the only state where an
+    # allotment check can return a real verdict.
+    "listed": "Allotment Announced",
 }
 
 

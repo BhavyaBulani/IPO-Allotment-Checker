@@ -28,7 +28,7 @@ import base64
 import json
 
 from db.models import ResultStatus
-from .base_live import BaseLiveRegistrar
+from .base_live import BaseLiveRegistrar, find_pan_field, normalize_pan
 from ..base import RegistrarResult
 
 SELECTORS = {
@@ -188,6 +188,23 @@ class BigshareLiveRegistrar(BaseLiveRegistrar):
         if "VALID PAN" in dpid.upper():
             return RegistrarResult(ResultStatus.Invalid_PAN, dpid)
 
+        # Only a successful lookup ("OK") carries a trustworthy ALLOTED value.
+        # Any other status is a site message, not an allotment record.
+        if status != "OK":
+            return RegistrarResult(
+                ResultStatus.Website_Error,
+                (f"Bigshare returned status '{status}': {message}" if message
+                 else f"Bigshare returned status '{status}'."),
+            )
+
+        returned_pan = find_pan_field(comp)
+        queried_pan = normalize_pan(pan)
+        if returned_pan and queried_pan and returned_pan != queried_pan:
+            return RegistrarResult(
+                ResultStatus.Website_Error,
+                "Bigshare returned a record for a different PAN; not treated as a verdict.",
+            )
+
         if "ALLOTED" in comp:
             shares = _parse_shares(comp.get("ALLOTED"))
             if shares is None:
@@ -213,7 +230,9 @@ def _parse_shares(value):
     if value is None:
         return None
     if isinstance(value, bool):
-        return int(value)
+        # A boolean is never a share count; treating True as 1 share would
+        # fabricate an "Allotted" verdict from an unexpected shape.
+        return None
     if isinstance(value, (int, float)):
         return int(value)
     text = str(value).replace(",", "").strip()

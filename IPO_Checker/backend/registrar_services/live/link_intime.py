@@ -29,7 +29,7 @@ import json
 import xml.etree.ElementTree as ET
 
 from db.models import ResultStatus
-from .base_live import BaseLiveRegistrar
+from .base_live import BaseLiveRegistrar, normalize_pan
 from ..base import RegistrarResult
 
 SELECTORS = {
@@ -56,6 +56,16 @@ def _child(elem, name: str):
     for c in elem:
         if _local(c.tag) == name:
             return c
+    return None
+
+
+def _row_pan(row) -> str | None:
+    """Return a non-empty PAN value from an XML result row, or None."""
+    for child in row:
+        if "PAN" in _local(child.tag).upper():
+            pan = normalize_pan(child.text)
+            if pan:
+                return pan
     return None
 
 
@@ -158,7 +168,28 @@ class LinkIntimeLiveRegistrar(BaseLiveRegistrar):
         messages = _children(root, "Table1")
 
         if tables:
-            shares = self._max_allotted(tables)
+            # Only trust rows that belong to the PAN we queried. A portal
+            # response can carry rows for more than one applicant; taking the
+            # max across all of them would fabricate "Allotted" from someone
+            # else's positive row.
+            queried_pan = normalize_pan(pan)
+            matched = []
+            saw_pan_field = False
+            for table in tables:
+                row_pan = _row_pan(table)
+                if row_pan is not None:
+                    saw_pan_field = True
+                    if queried_pan and row_pan != queried_pan:
+                        continue
+                matched.append(table)
+
+            if saw_pan_field and not matched:
+                return RegistrarResult(
+                    ResultStatus.Website_Error,
+                    f"{self.label} returned rows for a different PAN; not treated as a verdict.",
+                )
+
+            shares = self._max_allotted(matched)
             if shares is None:
                 return RegistrarResult(
                     ResultStatus.Website_Error,
@@ -225,7 +256,9 @@ def _parse_shares(value):
     if value is None:
         return None
     if isinstance(value, bool):
-        return int(value)
+        # A boolean is never a share count; treating True as 1 share would
+        # fabricate an "Allotted" verdict from an unexpected shape.
+        return None
     if isinstance(value, (int, float)):
         return int(value)
     text = str(value).replace(",", "").strip()

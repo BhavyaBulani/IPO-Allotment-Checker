@@ -19,7 +19,7 @@ Responses:
 import json
 
 from db.models import ResultStatus
-from .base_live import BaseLiveRegistrar
+from .base_live import BaseLiveRegistrar, normalize_pan
 from ..base import RegistrarResult
 
 # Validated against the live DOM on 22-08-2026.
@@ -116,6 +116,13 @@ class KFinLiveRegistrar(BaseLiveRegistrar):
             )
 
         if "All_Shares" in data:
+            queried_pan = normalize_pan(pan)
+            returned_pan = normalize_pan(data.get("Pan_No"))
+            if returned_pan and queried_pan and returned_pan != queried_pan:
+                return RegistrarResult(
+                    ResultStatus.Website_Error,
+                    "KFin returned a record for a different PAN; not treated as a verdict.",
+                )
             shares = _parse_shares(data.get("All_Shares"))
             if shares is None:
                 return RegistrarResult(
@@ -140,7 +147,9 @@ def _parse_shares(value):
     if value is None:
         return None
     if isinstance(value, bool):
-        return int(value)
+        # A boolean is never a share count; treating True as 1 share would
+        # fabricate an "Allotted" verdict from an unexpected shape.
+        return None
     if isinstance(value, (int, float)):
         return int(value)
     text = str(value).replace(",", "").strip()

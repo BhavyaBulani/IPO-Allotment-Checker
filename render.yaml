@@ -24,7 +24,7 @@ services:
       - key: SECRET_KEY
         generateValue: true        # random 64-char hex on first deploy
       - key: APP_PASSWORD
-        value: change-me-to-a-strong-shared-password
+        generateValue: true        # random per service; never store a real/shared secret in git
         sync: false                # set manually; not overwritten on re-sync
       - key: CORS_ORIGINS
         value: https://YOUR-VERCEL-APP.vercel.app

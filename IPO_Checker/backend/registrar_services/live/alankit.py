@@ -30,7 +30,7 @@ import json
 import re
 
 from db.models import ResultStatus
-from .base_live import BaseLiveRegistrar
+from .base_live import BaseLiveRegistrar, normalize_pan
 from ..base import RegistrarResult
 
 PAN_RE = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
@@ -142,12 +142,38 @@ class AlankitLiveRegistrar(BaseLiveRegistrar):
             )
 
         if len(data) == 0:
+            # This is the portal's documented "no record" response for a
+            # well-formed PAN + company selection. We only query IPOs whose
+            # allotment is announced, so "no record" is a genuine no-allotment
+            # signal, not an IPO that hasn't announced results yet.
             return RegistrarResult(
                 ResultStatus.Not_Allotted,
                 "Record not found in Alankit's allotment database (no allotment).",
             )
 
-        shares = self._max_allotted(data)
+        # Only trust rows that belong to the PAN we queried. Taking the max
+        # across every returned row could fabricate "Allotted" from another
+        # applicant's positive row.
+        queried_pan = normalize_pan(pan)
+        matched = []
+        saw_pan_field = False
+        for row in data:
+            if not isinstance(row, dict):
+                continue
+            returned_pan = normalize_pan(row.get("PANNO"))
+            if returned_pan is not None:
+                saw_pan_field = True
+                if queried_pan and returned_pan != queried_pan:
+                    continue
+            matched.append(row)
+
+        if saw_pan_field and not matched:
+            return RegistrarResult(
+                ResultStatus.Website_Error,
+                "Alankit returned rows for a different PAN; not treated as a verdict.",
+            )
+
+        shares = self._max_allotted(matched)
         if shares is None:
             return RegistrarResult(
                 ResultStatus.Website_Error,
@@ -179,7 +205,9 @@ def _parse_shares(value):
     if value is None:
         return None
     if isinstance(value, bool):
-        return int(value)
+        # A boolean is never a share count; treating True as 1 share would
+        # fabricate an "Allotted" verdict from an unexpected shape.
+        return None
     if isinstance(value, (int, float)):
         return int(value)
     text = str(value).replace(",", "").strip()
