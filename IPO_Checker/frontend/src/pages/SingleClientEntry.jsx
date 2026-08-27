@@ -1,24 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Search, Loader2 } from 'lucide-react';
+import { ArrowLeft, Search, Loader2, ChevronDown, AlertCircle } from 'lucide-react';
 import api from '../lib/api';
 
 export default function SingleClientEntry() {
   const [identifier, setIdentifier] = useState('');
+  const [ipos, setIpos] = useState([]);
+  const [iposLoading, setIposLoading] = useState(true);
+  const [iposError, setIposError] = useState(null);
+  const [selectedIpoId, setSelectedIpoId] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
+  useEffect(() => {
+    const fetchCheckableIpos = async () => {
+      setIposLoading(true);
+      setIposError(null);
+      try {
+        const res = await api.get('/ipos/', { params: { checkable: true } });
+        setIpos(res.data || []);
+      } catch (err) {
+        setIposError(err.response?.data?.detail || 'Failed to load available IPOs.');
+      } finally {
+        setIposLoading(false);
+      }
+    };
+    fetchCheckableIpos();
+  }, []);
+
   const handleCheck = async (e) => {
     e.preventDefault();
-    if (!identifier) return;
+    if (!identifier || !selectedIpoId) return;
 
     setLoading(true);
     setError(null);
     setResult(null);
 
     try {
-      const res = await api.post('/check/all', { identifier });
+      const res = await api.post('/check/single', {
+        identifier,
+        ipo_ids: [Number(selectedIpoId)],
+      });
       setResult(res.data);
     } catch (err) {
       setError(err.response?.data?.detail || 'An unexpected error occurred');
@@ -26,6 +49,8 @@ export default function SingleClientEntry() {
       setLoading(false);
     }
   };
+
+  const selectedIpo = ipos.find((ipo) => String(ipo.id) === String(selectedIpoId));
 
   return (
     <div className="min-h-screen bg-slate-900 p-6">
@@ -40,7 +65,7 @@ export default function SingleClientEntry() {
           </div>
 
           <h1 className="text-3xl font-bold text-white mb-2">Single Client Check</h1>
-          <p className="text-slate-400 mb-10">Enter a PAN or Client Code to check allotment status across all current IPOs.</p>
+          <p className="text-slate-400 mb-10">Enter a PAN or Client Code and select an IPO to check allotment status.</p>
 
           <form onSubmit={handleCheck} className="space-y-6 relative z-10">
             <div>
@@ -55,9 +80,43 @@ export default function SingleClientEntry() {
               />
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Select IPO</label>
+              {iposLoading ? (
+                <div className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-slate-500 flex items-center gap-2">
+                  <Loader2 className="animate-spin" size={16} /> Loading available IPOs...
+                </div>
+              ) : iposError ? (
+                <div className="w-full bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 flex items-start gap-2 text-sm">
+                  <AlertCircle size={16} className="shrink-0 mt-0.5" /> {iposError}
+                </div>
+              ) : ipos.length === 0 ? (
+                <div className="w-full bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 text-amber-400 text-sm">
+                  No IPOs with an announced allotment are available to check right now.
+                </div>
+              ) : (
+                <div className="relative">
+                  <select
+                    value={selectedIpoId}
+                    onChange={(e) => setSelectedIpoId(e.target.value)}
+                    className="w-full appearance-none bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner cursor-pointer disabled:opacity-50"
+                    required
+                  >
+                    <option value="" disabled>Select an IPO to check</option>
+                    {ipos.map((ipo) => (
+                      <option key={ipo.id} value={ipo.id} className="bg-slate-900">
+                        {ipo.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={20} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                </div>
+              )}
+            </div>
+
             <button
               type="submit"
-              disabled={loading || identifier.length < 5}
+              disabled={loading || identifier.length < 5 || !selectedIpoId}
               className="w-full mt-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-6 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20"
             >
               {loading ? <Loader2 className="animate-spin" size={20} /> : <Search size={20} />}
@@ -87,6 +146,12 @@ export default function SingleClientEntry() {
                   <span className="text-slate-400">Detected Format</span>
                   <span className="bg-slate-700 px-2 py-1 rounded text-xs">{result.identifier_type}</span>
                 </div>
+                {selectedIpo && (
+                  <div className="flex justify-between border-b border-slate-700 pb-3">
+                    <span className="text-slate-400">IPO</span>
+                    <span className="text-white font-medium">{selectedIpo.name}</span>
+                  </div>
+                )}
                 {result.results && result.results.length > 0 ? (
                   <div className="mt-4">
                     <span className="text-slate-400 block mb-3 font-semibold">Allotment Details:</span>

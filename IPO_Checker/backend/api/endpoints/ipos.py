@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from db.session import get_db
 from db.models import IPO, IPOStatus
@@ -21,9 +21,23 @@ class IpoResponse(BaseModel):
         from_attributes = True
 
 @router.get("/", response_model=List[IpoResponse])
-def get_validated_ipos(db: Session = Depends(get_db)):
-    """Fetch all validated IPOs available for selection."""
-    ipos = db.query(IPO).filter(IPO.validated == True).all()
+def get_validated_ipos(
+    db: Session = Depends(get_db),
+    checkable: bool = Query(
+        False,
+        description="Return only IPOs whose allotment is announced (i.e. actually checkable right now).",
+    ),
+):
+    """Fetch validated IPOs available for selection.
+
+    With ``checkable=true`` only IPOs in ``Allotment Announced`` status are
+    returned, so the dashboard dropdown never offers an IPO whose verdict is
+    still pending (a registrar has no record yet for those).
+    """
+    query = db.query(IPO).filter(IPO.validated == True)
+    if checkable:
+        query = query.filter(IPO.status == IPOStatus.Allotment_Announced)
+    ipos = query.all()
     
     def sort_key(ipo):
         priority = 4
