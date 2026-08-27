@@ -60,7 +60,10 @@ def is_sane_ipo(name: str, status: IPOStatus) -> bool:
 
 
 def _normalize_name_for_match(value: str) -> str:
-    return re.sub(r"\s+", " ", value or "").strip().lower()
+    # Match on the same suffix-insensitive key everywhere so a dropdown name
+    # like "Foo Ltd" and an exchange name "Foo Limited" update one row instead
+    # of creating a duplicate.
+    return _normalize_name_loose(value)
 
 
 def _normalize_name_loose(value: str) -> str:
@@ -107,11 +110,48 @@ def _merge_checkable(records: list[ReconciledIPO], dropdown_rows: list[dict]) ->
         checkable = checkable_by_name.get(key)
         if checkable and _registrars_compatible(record.registrar_name, checkable.get("registrar_name")):
             record.status = "Allotment Announced"
+            # The registrar portal literally lists this company, so it is the
+            # authoritative registrar for the row — not just a status signal.
+            record.registrar_name = checkable.get("registrar_name") or record.registrar_name
             if "registrar-dropdown" not in record.sources:
                 record.sources = list(record.sources) + ["registrar-dropdown"]
             record.validated = True
         merged.append(record)
     return merged
+
+
+def _dropdown_only_records(records: list[ReconciledIPO], dropdown_rows: list[dict]) -> list[ReconciledIPO]:
+    """Create Allotment Announced records for dropdown names absent from exchange feeds.
+
+    The registrar allotment dropdown is the authoritative list of "results are
+    live right now". If an exchange feed is blocked or a company has already
+    dropped off NSE/BSE's upcoming-issues endpoint, the dropdown is the only
+    place its checkable name appears — so we create the row directly instead of
+    waiting for a promotion. Non-equity instruments are already filtered in the
+    source, so these are real, checkable equity IPOs.
+    """
+    existing_keys = {_normalize_name_loose(r.name) for r in records}
+    created: list[ReconciledIPO] = []
+    seen: set[str] = set()
+    for row in dropdown_rows:
+        name = row.get("name")
+        if not name:
+            continue
+        key = _normalize_name_loose(name)
+        if not key or key in existing_keys or key in seen:
+            continue
+        seen.add(key)
+        created.append(ReconciledIPO(
+            name=str(name).strip(),
+            status="Allotment Announced",
+            open_date=None,
+            close_date=None,
+            registrar_name=row.get("registrar_name"),
+            sources=["registrar-dropdown"],
+            validated=True,
+            reason="listed on registrar allotment portal",
+        ))
+    return created
 
 
 def _parse_date(value) -> datetime.datetime | None:
@@ -278,6 +318,7 @@ def sync_ipos(include_registrar_dropdown: bool | None = None) -> dict:
 
     records = reconcile(nse_rows, bse_rows, upstox_rows)
     records = _merge_checkable(records, dropdown_rows)
+    records += _dropdown_only_records(records, dropdown_rows)
 
     db = SessionLocal()
     added = updated = held_for_review = 0

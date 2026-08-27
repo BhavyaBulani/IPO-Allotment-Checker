@@ -44,6 +44,24 @@ logger = logging.getLogger(__name__)
 
 STATUS_ANNOUNCED = "Allotment Announced"
 
+# Registrar portals host NCDs, INVITs, REITs, bond issues, rights issues etc.
+# in the same dropdown as equity IPOs. We only ever auto-create equity IPO
+# rows, so filter those instruments out here. The pattern is word-boundary
+# aware so a company like "Bondada Engineering" is not dropped.
+_NON_EQUITY_RE = re.compile(
+    r"\b(NCD|DEBENTURES?|BONDS?|INVIT|INV\s?IT|REIT|BUYBACK|QIP|ETF|"
+    r"PREFERENTIAL|NON[- ]CONVERTIBLE|COMMERCIAL\s+PAPER|MUTUAL\s+FUND|"
+    r"RIGHTS?\s+ISSUE)\b",
+    re.IGNORECASE,
+)
+
+
+def is_equity_ipo(name: str) -> bool:
+    """True when a dropdown name looks like an equity IPO, not a non-equity instrument."""
+    if not name:
+        return False
+    return _NON_EQUITY_RE.search(str(name)) is None
+
 # Link Intime and MUFG Intime are the same company/portal (MUFG is the
 # renamed Link Intime), so the one portal serves both registrar IDs.
 LINK_MUFG_PORTAL = [1, 4]
@@ -217,6 +235,8 @@ def fetch_registrar_checkable_ipos(headless: bool | None = None) -> list[dict]:
                         )
                         names = []
                     for name in names:
+                        if not is_equity_ipo(name):
+                            continue
                         results.append({
                             "name": name,
                             "status": STATUS_ANNOUNCED,

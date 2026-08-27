@@ -14,14 +14,19 @@ logger = logging.getLogger(__name__)
 # Sync interval in seconds (4 hours)
 IPO_SYNC_INTERVAL_SECONDS = 4 * 60 * 60
 
-# Registrar dropdown discovery interval (24 hours). This is the heavier
+# Registrar dropdown discovery interval (6 hours). This is the heavier
 # Playwright scan that detects which IPOs have live allotment results; it
 # runs as a separate, slower loop so the 4-hour HTTP sync stays fast.
-REGISTRAR_DROPDOWN_SYNC_INTERVAL_SECONDS = 24 * 60 * 60
+REGISTRAR_DROPDOWN_SYNC_INTERVAL_SECONDS = 6 * 60 * 60
 
 
 def _registrar_dropdown_enabled() -> bool:
-    raw = os.environ.get("ENABLE_REGISTRAR_DROPDOWN_DISCOVERY", "0")
+    raw = os.environ.get("ENABLE_REGISTRAR_DROPDOWN_DISCOVERY")
+    if raw is None:
+        # Default ON: registrar portals are the authoritative source of which
+        # IPOs are currently checkable, so the app stays self-sufficient even
+        # if this flag was never set on the host. Set "0" to explicitly disable.
+        return True
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
