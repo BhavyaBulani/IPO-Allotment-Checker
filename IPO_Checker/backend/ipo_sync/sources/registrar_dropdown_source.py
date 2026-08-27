@@ -62,6 +62,19 @@ def is_equity_ipo(name: str) -> bool:
         return False
     return _NON_EQUITY_RE.search(str(name)) is None
 
+
+_IPO_SUFFIX_RE = re.compile(r"\s*[-\u2013]?\s*IPO\s*$", re.IGNORECASE)
+
+
+def _clean_issue_name(name: str) -> str:
+    """Strip registrar-specific suffixes like "Gaja ... Limited - IPO".
+
+    Kept so the stored IPO name matches the plain company name used by the
+    exchanges and the live checkers (which already substring-match), and so a
+    dropdown row and an exchange row for the same company don't diverge.
+    """
+    return _IPO_SUFFIX_RE.sub("", (name or "").strip()).strip()
+
 # Link Intime and MUFG Intime are the same company/portal (MUFG is the
 # renamed Link Intime), so the one portal serves both registrar IDs.
 LINK_MUFG_PORTAL = [1, 4]
@@ -235,6 +248,7 @@ def fetch_registrar_checkable_ipos(headless: bool | None = None) -> list[dict]:
                         )
                         names = []
                     for name in names:
+                        name = _clean_issue_name(name)
                         if not is_equity_ipo(name):
                             continue
                         results.append({
