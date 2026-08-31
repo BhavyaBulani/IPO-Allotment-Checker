@@ -28,9 +28,13 @@ CANONICAL_REGISTRARS = [
 # Known free-text variants seen from exchanges/aggregators, lowercased.
 _ALIASES = {
     "link intime": "Link Intime",
+    "link in time": "Link Intime",
     "link intime india": "Link Intime",
+    "link in time india": "Link Intime",
     "link intime india private limited": "Link Intime",
+    "link in time india private limited": "Link Intime",
     "link intime india pvt ltd": "Link Intime",
+    "link in time india pvt ltd": "Link Intime",
     "link intime india pvt. ltd.": "Link Intime",
 
     "kfin": "KFin Technologies",

@@ -23,7 +23,11 @@ from ipo_sync.registrar_map import resolve_registrar_name
 # auto-publish (no cross-check needed) because they're primary/official
 # rather than scraped/aggregated. NSE qualifies because its per-IPO detail
 # endpoint supplies the registrar straight from the exchange's own records.
-_AUTHORITATIVE_SOLO_SOURCES = {"NSE", "Upstox"}
+# ipotracker is the user's own curated catalog (with registrar + dates), and
+# FinAPI is a structured, API-key-authenticated catalog. Both are treated as
+# primary, though FinAPI rows still need a registrar from another source to
+# pass validation (its catalog endpoint doesn't expose one).
+_AUTHORITATIVE_SOLO_SOURCES = {"NSE", "Upstox", "ipotracker", "FinAPI"}
 
 
 @dataclass
@@ -39,6 +43,7 @@ class ReconciledIPO:
 
 
 def _normalize_name_for_match(value: str) -> str:
+    value = re.sub(r"\s*&\s*", " and ", value or "")
     value = re.sub(r"\b(limited|ltd|private|pvt)\b\.?", "", value or "", flags=re.I)
     value = re.sub(r"\s+", " ", value).strip().lower()
     return value

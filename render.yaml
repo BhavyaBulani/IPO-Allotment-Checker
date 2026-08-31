@@ -16,7 +16,7 @@ services:
     plan: free
     rootDir: IPO_Checker/backend
     buildCommand: pip install --upgrade pip && pip install -r requirements.txt && playwright install --with-deps chromium
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    startCommand: alembic upgrade head && python scripts/seed_registrars.py && uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: APP_ENV
@@ -68,6 +68,23 @@ services:
         value: "1"
       - key: REGISTRAR_DROPDOWN_HEADLESS
         value: "1"
+      # --- Additional IPO sources ---
+      - key: IPOT_SUPABASE_URL
+        value: https://zdzwtiwerwtzzhclvhdo.supabase.co
+        sync: false
+      - key: IPOT_ANON_KEY
+        sync: false
+      - key: IPOT_EMAIL
+        sync: false
+      - key: IPOT_PASSWORD
+        sync: false
+      - key: FINAPI_BASE_URL
+        value: https://finapi.upvaly.com
+        sync: false
+      - key: FINAPI_API_KEY
+        sync: false
+      - key: UPSTOX_ACCESS_TOKEN
+        sync: false
       - key: TWOCAPTCHA_API_KEY
         sync: false
       - key: CAPTCHA_AUTO_SOLVER

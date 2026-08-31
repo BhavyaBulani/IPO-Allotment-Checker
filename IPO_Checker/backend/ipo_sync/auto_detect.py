@@ -23,6 +23,7 @@ it by this name and none of them need to change.
 """
 
 import datetime
+import hashlib
 import logging
 import re
 import sys
@@ -35,6 +36,8 @@ from db.models import IPO, IPOStatus, Registrar
 from ipo_sync.sources.nse_source import fetch_nse_ipos
 from ipo_sync.sources.bse_source import fetch_bse_ipos
 from ipo_sync.sources.upstox_source import fetch_upstox_ipos
+from ipo_sync.sources.ipotracker_source import fetch_ipotracker_ipos
+from ipo_sync.sources.finapi_source import fetch_finapi_ipos
 from ipo_sync.sources.registrar_dropdown_source import fetch_registrar_checkable_ipos
 from ipo_sync.reconcile import reconcile, ReconciledIPO
 
@@ -68,8 +71,22 @@ def _normalize_name_for_match(value: str) -> str:
 
 def _normalize_name_loose(value: str) -> str:
     """Name key that ignores legal-suffix differences (Ltd/Pvt/Limited)."""
+    value = re.sub(r"\s*&\s*", " and ", value or "")
     value = re.sub(r"\b(limited|ltd|private|pvt)\b\.?", "", value or "", flags=re.I)
     return re.sub(r"\s+", " ", value).strip().lower()
+
+
+def _make_external_id(sources: list[str], normalized_name: str) -> str:
+    """Deterministic external_id that never exceeds String(100).
+
+    The old scheme concatenated every source with up to 80 chars of the name,
+    which overflowed the column once several sources reported the same IPO.
+    Rows are matched by normalized name (not external_id), so the id only
+    needs to be unique and stable — a short name hash guarantees both.
+    """
+    source_part = "-".join(s.lower() for s in sources)
+    digest = hashlib.sha1(normalized_name.encode("utf-8")).hexdigest()[:12]
+    return f"{source_part}-{digest}"
 
 
 # Link Intime and MUFG Intime are the same portal (MUFG is the renamed
@@ -253,7 +270,7 @@ def _upsert(db, record: ReconciledIPO, existing_by_name: dict[str, IPO]) -> str:
         return "unchanged"
 
     new_ipo = IPO(
-        external_id=f"{'-'.join(s.lower() for s in record.sources)}-{normalized_name.replace(' ', '-')[:80]}",
+        external_id=_make_external_id(record.sources, normalized_name),
         name=record.name,
         status=status_enum,
         source="+".join(record.sources),
@@ -304,6 +321,18 @@ def sync_ipos(include_registrar_dropdown: bool | None = None) -> dict:
         logger.error("Upstox fetch raised unexpectedly: %s", exc, exc_info=True)
         upstox_rows = []
 
+    try:
+        ipotracker_rows = fetch_ipotracker_ipos()
+    except Exception as exc:
+        logger.error("ipotracker fetch raised unexpectedly: %s", exc, exc_info=True)
+        ipotracker_rows = []
+
+    try:
+        finapi_rows = fetch_finapi_ipos()
+    except Exception as exc:
+        logger.error("FinAPI fetch raised unexpectedly: %s", exc, exc_info=True)
+        finapi_rows = []
+
     dropdown_rows = []
     if include_registrar_dropdown:
         try:
@@ -312,11 +341,14 @@ def sync_ipos(include_registrar_dropdown: bool | None = None) -> dict:
             logger.error("Registrar dropdown discovery raised unexpectedly: %s", exc, exc_info=True)
             dropdown_rows = []
 
-    if not nse_rows and not bse_rows and not upstox_rows and not dropdown_rows:
-        logger.warning("NSE, BSE, Upstox, and registrar dropdowns were all unreachable this run. Database left unchanged.")
+    if not nse_rows and not bse_rows and not upstox_rows and not ipotracker_rows and not finapi_rows and not dropdown_rows:
+        logger.warning("NSE, BSE, Upstox, ipotracker, FinAPI, and registrar dropdowns were all unreachable this run. Database left unchanged.")
         return {"added": 0, "updated": 0, "held_for_review": 0, "source": "none"}
 
-    records = reconcile(nse_rows, bse_rows, upstox_rows)
+    records = reconcile(
+        nse_rows, bse_rows, upstox_rows, ipotracker_rows, finapi_rows,
+        source_names=["NSE", "BSE", "Upstox", "ipotracker", "FinAPI"],
+    )
     records = _merge_checkable(records, dropdown_rows)
     records += _dropdown_only_records(records, dropdown_rows)
 
@@ -347,6 +379,8 @@ def sync_ipos(include_registrar_dropdown: bool | None = None) -> dict:
             ("NSE", nse_rows),
             ("BSE", bse_rows),
             ("Upstox", upstox_rows),
+            ("ipotracker", ipotracker_rows),
+            ("FinAPI", finapi_rows),
             ("registrar-dropdown", dropdown_rows),
         ) if rows
     ) or "none"

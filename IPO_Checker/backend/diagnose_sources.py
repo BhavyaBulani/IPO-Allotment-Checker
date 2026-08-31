@@ -41,10 +41,14 @@ if __name__ == "__main__":
     from ipo_sync.sources.nse_source import fetch_nse_ipos
     from ipo_sync.sources.bse_source import fetch_bse_ipos
     from ipo_sync.sources.upstox_source import fetch_upstox_ipos
+    from ipo_sync.sources.ipotracker_source import fetch_ipotracker_ipos
+    from ipo_sync.sources.finapi_source import fetch_finapi_ipos
 
     check("NSE", fetch_nse_ipos)
     check("BSE", fetch_bse_ipos)
     check("Upstox", fetch_upstox_ipos)
+    check("ipotracker", fetch_ipotracker_ipos)
+    check("FinAPI", fetch_finapi_ipos)
 
     print(
         "\nIf NSE/BSE show 0 rows here but work fine from your laptop, "
