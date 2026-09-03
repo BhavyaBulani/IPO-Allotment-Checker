@@ -105,14 +105,20 @@ class KFinLiveRegistrar(BaseLiveRegistrar):
             )
 
         if "error" in data:
-            if str(data.get("error")).strip() == RECORD_NOT_FOUND:
+            err_msg = str(data.get("error")).strip()
+            if err_msg == RECORD_NOT_FOUND:
                 return RegistrarResult(
                     ResultStatus.Not_Allotted,
                     "Record not found in KFin's allotment database (no allotment).",
                 )
+            if err_msg.lower() == "unknown error":
+                return RegistrarResult(
+                    ResultStatus.Not_Allotted,
+                    "Record not found (KFin returned 'unknown error' - allotment data may not be available yet).",
+                )
             return RegistrarResult(
                 ResultStatus.Website_Error,
-                f"KFin query error: {data.get('error')}",
+                f"KFin query error: {err_msg}",
             )
 
         if "All_Shares" in data:
