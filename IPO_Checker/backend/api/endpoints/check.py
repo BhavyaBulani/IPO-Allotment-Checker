@@ -28,15 +28,15 @@ def validate_pan(pan: str) -> bool:
 # Only these stages have a final allotment list to query. Checking a PAN
 # against an IPO that is still Open/Upcoming yields a fabricated "Not
 # Allotted" (the registrar simply has no record yet), so we never do it.
-_CHECKABLE_STATUSES = (IPOStatus.Closed,)
+_CHECKABLE_STATUSES = (IPOStatus.Closed, IPOStatus.Allotment_Announced)
 
 _NO_CHECKABLE_IPOS_MSG = (
-    "No Closed IPOs are available to check right now. "
+    "No checkable IPOs (Closed or Allotment Announced) are available right now. "
 )
 
 
 def _checkable_ipos(db):
-    """Return only Closed IPOs to check their allotment status."""
+    """Return only Closed or Allotment Announced IPOs to check their allotment status."""
     return (
         db.query(IPO)
         .filter(IPO.validated == True, IPO.status.in_(_CHECKABLE_STATUSES))
@@ -180,7 +180,7 @@ def check_all_identifier(request: IdentifierCheckRequest, db: Session = Depends(
 
 @router.post("/single")
 def check_single_client(request: SingleCheckRequest, db: Session = Depends(get_db)):
-    # Validate IPOs — only Closed IPOs can be checked.
+    # Validate IPOs — only checkable IPOs can be checked.
     ipos = db.query(IPO).filter(
         IPO.id.in_(request.ipo_ids),
         IPO.validated == True,
@@ -189,7 +189,7 @@ def check_single_client(request: SingleCheckRequest, db: Session = Depends(get_d
     if len(ipos) != len(request.ipo_ids):
         raise HTTPException(
             status_code=400,
-            detail="One or more selected IPOs are invalid, not found, or are not Closed.",
+            detail="One or more selected IPOs are invalid, not found, or are not checkable.",
         )
 
     # Determine if the input is a PAN or Client Code
@@ -250,9 +250,9 @@ async def check_bulk_upload(
             IPO.status.in_(_CHECKABLE_STATUSES),
         ).all()
         if len(ipos) != len(ipo_id_list) or len(ipos) == 0:
-            raise HTTPException(status_code=400, detail="Invalid IPO selection: one or more IPOs are not Closed.")
+            raise HTTPException(status_code=400, detail="Invalid IPO selection: one or more IPOs are not checkable.")
     else:
-        # No selection means "check every Closed IPO".
+        # No selection means "check every checkable IPO".
         ipos = _checkable_ipos(db)
         if not ipos:
             raise HTTPException(status_code=400, detail=_NO_CHECKABLE_IPOS_MSG)

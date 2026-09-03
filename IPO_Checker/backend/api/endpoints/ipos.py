@@ -36,7 +36,8 @@ def get_validated_ipos(
     """
     query = db.query(IPO).filter(IPO.validated == True)
     if checkable:
-        query = query.filter(IPO.status == IPOStatus.Allotment_Announced)
+        from api.endpoints.check import _CHECKABLE_STATUSES
+        query = query.filter(IPO.status.in_(_CHECKABLE_STATUSES))
     ipos = query.all()
     
     def sort_key(ipo):

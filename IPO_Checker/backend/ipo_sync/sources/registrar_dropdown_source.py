@@ -49,9 +49,9 @@ STATUS_ANNOUNCED = "Allotment Announced"
 # rows, so filter those instruments out here. The pattern is word-boundary
 # aware so a company like "Bondada Engineering" is not dropped.
 _NON_EQUITY_RE = re.compile(
-    r"\b(NCD|DEBENTURES?|BONDS?|INVIT|INV\s?IT|REIT|BUYBACK|QIP|ETF|"
+    r"\b(NCD\w*|DEBENTURES?|BONDS?|INVIT|INV\s?IT|REIT|BUYBACK|QIP|ETF|"
     r"PREFERENTIAL|NON[- ]CONVERTIBLE|COMMERCIAL\s+PAPER|MUTUAL\s+FUND|"
-    r"RIGHTS?\s+ISSUE)\b",
+    r"RIGHTS?\s+ISSUE|TRUST|COUPON)\b",
     re.IGNORECASE,
 )
 
