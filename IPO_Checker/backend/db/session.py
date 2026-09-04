@@ -11,7 +11,10 @@ MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "ipo_password")
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
 MYSQL_PORT = os.getenv("MYSQL_PORT", "3306")
 MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "ipo_checker")
-MYSQL_SSL_MODE = os.getenv("MYSQL_SSL_MODE", "")
+# Aiven and most managed MySQL require TLS. Default to REQUIRED so a missing
+# env var can't silently produce an unencrypted (and rejected) connection.
+# Set MYSQL_SSL_MODE=DISABLED (or empty) only for a local Docker MySQL.
+MYSQL_SSL_MODE = os.getenv("MYSQL_SSL_MODE", "REQUIRED").strip().upper()
 
 DATABASE_URL = URL.create(
     drivername="mysql+pymysql",
@@ -29,7 +32,7 @@ from sqlalchemy import event
 logger = logging.getLogger(__name__)
 
 connect_args = {}
-if MYSQL_SSL_MODE == "REQUIRED":
+if MYSQL_SSL_MODE not in {"", "DISABLED", "OFF", "0", "FALSE", "NO", "NONE"}:
     connect_args["ssl"] = {}
 
 # Configure connection pool

@@ -19,6 +19,11 @@ IPO_SYNC_INTERVAL_SECONDS = 4 * 60 * 60
 # runs as a separate, slower loop so the 4-hour HTTP sync stays fast.
 REGISTRAR_DROPDOWN_SYNC_INTERVAL_SECONDS = 6 * 60 * 60
 
+# Database keep-alive interval (10 minutes). Aiven's free tier powers the
+# service off after ~2h without traffic, which drops DNS and 500s every
+# DB-backed route; a trivial SELECT 1 on this cadence keeps it warm.
+DB_KEEPALIVE_INTERVAL_SECONDS = 10 * 60
+
 
 def _registrar_dropdown_enabled() -> bool:
     raw = os.environ.get("ENABLE_REGISTRAR_DROPDOWN_DISCOVERY")
@@ -26,6 +31,15 @@ def _registrar_dropdown_enabled() -> bool:
         # Default ON: registrar portals are the authoritative source of which
         # IPOs are currently checkable, so the app stays self-sufficient even
         # if this flag was never set on the host. Set "0" to explicitly disable.
+        return True
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _db_keepalive_enabled() -> bool:
+    raw = os.environ.get("DB_KEEPALIVE_ENABLED")
+    if raw is None:
+        # Default ON: prevents a managed MySQL (Aiven free tier) from
+        # auto-powering-off. Set "0" once the DB is on an always-on plan.
         return True
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
@@ -72,6 +86,35 @@ async def _periodic_registrar_dropdown_sync():
         await asyncio.sleep(REGISTRAR_DROPDOWN_SYNC_INTERVAL_SECONDS)
 
 
+async def _db_keepalive():
+    """Ping the database periodically so a managed MySQL (Aiven free tier)
+    doesn't auto-power-off from inactivity.
+
+    Aiven's free tier powers the service off after ~2h with no traffic, which
+    drops DNS and turns every DB-backed route into a 500. This runs a trivial
+    SELECT 1 on a short interval so there is always recent DB activity. Note:
+    this only helps while THIS service is itself kept awake by external /health
+    pings — Render's free tier also sleeps after ~15 min of no HTTP traffic.
+    """
+    # Import lazily so importing main.py never requires DB configuration.
+    from sqlalchemy import text
+
+    from db.session import engine
+
+    await asyncio.sleep(60)  # let startup settle before the first ping
+    while True:
+        try:
+            def _ping():
+                with engine.connect() as conn:
+                    conn.execute(text("SELECT 1"))
+
+            await asyncio.to_thread(_ping)
+            logger.debug("DB keep-alive ping succeeded.")
+        except Exception as e:
+            logger.warning(f"DB keep-alive ping failed: {e}")
+        await asyncio.sleep(DB_KEEPALIVE_INTERVAL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events for the application."""
@@ -96,6 +139,17 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Registrar dropdown sync is disabled (ENABLE_REGISTRAR_DROPDOWN_DISCOVERY=0).")
     
+    # Keep-alive ping so a managed MySQL (Aiven free tier) doesn't auto-pause.
+    keepalive_task = None
+    if _db_keepalive_enabled():
+        keepalive_task = asyncio.create_task(_db_keepalive())
+        logger.info(
+            f"DB keep-alive scheduled every {DB_KEEPALIVE_INTERVAL_SECONDS // 60} "
+            "minutes (first ping in 60s)."
+        )
+    else:
+        logger.info("DB keep-alive is disabled (DB_KEEPALIVE_ENABLED=0).")
+
     yield  # Application runs here
     
     # --- Shutdown ---
@@ -108,6 +162,12 @@ async def lifespan(app: FastAPI):
         dropdown_task.cancel()
         try:
             await dropdown_task
+        except asyncio.CancelledError:
+            pass
+    if keepalive_task is not None:
+        keepalive_task.cancel()
+        try:
+            await keepalive_task
         except asyncio.CancelledError:
             pass
     logger.info("Application shutting down.")

@@ -52,6 +52,10 @@ services:
           property: database
       - key: MYSQL_SSL_MODE
         value: REQUIRED
+      # Periodic DB ping so Aiven's free tier doesn't auto-power-off. Disable
+      # ("0") once the database is on an always-on (paid) plan.
+      - key: DB_KEEPALIVE_ENABLED
+        value: "1"
       # --- Live registrar automation ---
       - key: LIVE_REGISTRAR_HEADLESS
         value: "1"
