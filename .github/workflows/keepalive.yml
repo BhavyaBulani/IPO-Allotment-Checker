@@ -1,17 +1,25 @@
-name: Keep backend awake
+name: Keep backend and database awake
 
 # Free-tier services sleep from inactivity:
 #   - Render backend sleeps after ~15 min with no HTTP traffic.
 #   - Aiven MySQL (free tier) powers off after ~2 h with no traffic.
-# This workflow pings the Render /health endpoint on a cadence shorter than
-# Render's sleep window. The backend's own in-app DB keep-alive loop then pings
-# MySQL, so the two layers together keep the whole stack warm without a paid
-# plan. This is a stopgap: upgrade the database to an always-on plan for real
-# production traffic.
+#
+# This workflow hits /health/db, which runs a real `SELECT 1` against MySQL.
+# One request therefore keeps BOTH layers warm: Render receives the HTTP
+# traffic it needs to stay awake, and the request handler exercises the DB
+# connection so Aiven sees recent activity. Pinging the DB only through the
+# backend's background task was unreliable, because that task freezes whenever
+# Render's free instance sleeps.
+#
+# Stopgap: upgrade the database to an always-on plan for real production
+# traffic. A free GitHub Actions schedule can also be delayed by minutes and is
+# disabled after 60 days with no commits — for a guaranteed "always on" path,
+# point a free cron-job.org (or UptimeRobot) monitor at:
+#   https://ipo-allotment-checker.onrender.com/health/db
 
 on:
   schedule:
-    # Every 10 minutes.
+    # Every 10 minutes — well inside Aiven's ~2 h idle window.
     - cron: "*/10 * * * *"
   workflow_dispatch:
 
@@ -19,12 +27,18 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Render health endpoint
+      - name: Ping DB-backed health endpoint (wakes Render + MySQL)
         run: |
           curl --fail --silent --show-error --max-time 60 \
             --retry 2 --retry-delay 10 --retry-all-errors \
+            https://ipo-allotment-checker.onrender.com/health/db
+
+      - name: Ping plain health endpoint as a fallback
+        if: always()
+        run: |
+          curl --fail --silent --show-error --max-time 60 \
             https://ipo-allotment-checker.onrender.com/health
 
   # Note: GitHub disables scheduled workflows in a repository after 60 days
   # with no commits. If this ever stops keeping the site warm, push any commit
-  # to the repo to re-enable the schedule.
+  # to the repo to re-enable the schedule, or use cron-job.org as above.

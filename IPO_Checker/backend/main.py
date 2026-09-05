@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from api.router import api_router
 
@@ -193,3 +194,32 @@ app.include_router(api_router, prefix="/api")
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/health/db")
+def health_db_check():
+    """Readiness probe that actually touches MySQL.
+
+    Unlike ``/health``, this runs a real ``SELECT 1`` against the database so a
+    single external ping (GitHub Actions / cron-job.org / UptimeRobot) warms
+    BOTH Render's free-tier web service and Aiven's free-tier MySQL at once.
+
+    This matters because Aiven powers off after ~2h with no traffic, while the
+    in-process ``_db_keepalive`` background task freezes whenever Render sleeps
+    (~15 min of no HTTP). A request handler runs synchronously on wake-up, so
+    it is the reliable place to exercise the DB connection.
+    """
+    from sqlalchemy import text
+
+    from db.session import engine
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as exc:
+        logger.warning("DB health check failed: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "detail": "database unreachable"},
+        )
+    return {"status": "ok", "database": "ok"}
