@@ -123,7 +123,12 @@ async def lifespan(app: FastAPI):
     logger.info("Application starting up. Running IPO auto-sync...")
     try:
         from ipo_sync.auto_detect import sync_ipos
-        result = sync_ipos()
+        # Run the sync in a worker thread so its HTTP calls never block the
+        # event loop, and explicitly skip the Playwright registrar-dropdown
+        # scan here (the dedicated `_periodic_registrar_dropdown_sync` task
+        # handles that shortly after startup). Running Playwright's sync API
+        # inside the asyncio loop raises "Sync API inside the asyncio loop".
+        result = await asyncio.to_thread(sync_ipos, False)
         logger.info(f"IPO auto-sync result: Added {result['added']}, Updated {result['updated']} from {result['source']}")
     except Exception as e:
         logger.warning(f"IPO auto-sync failed on startup: {e}. Keeping existing IPO rows as fallback.")

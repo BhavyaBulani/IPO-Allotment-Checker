@@ -95,3 +95,8 @@ db_data/
 
 .vercel
 .env*
+
+# Local diagnostics (intentionally not committed)
+ipo_api_response.txt
+login_test.json
+tools/

@@ -1,13 +1,20 @@
 """
 BSE official IPO listing source.
 
-api.bseindia.com serves this as free public JSON, no key needed. It's less
-aggressive about blocking than NSE but can still return an HTML error page
-for a plain requests.get() without a browser-like User-Agent — this shows
-up as "invalid JSON" rather than a clean HTTP error, so we guard for that.
+BSE's "Live / Forthcoming Issues" page is driven by:
 
-Field names are unconfirmed against a live response (see diagnose_sources.py)
-and may need adjusting in _NAME_KEYS etc. once you've verified them.
+    https://api.bseindia.com/BseIndiaAPI/api/GetPublicIssue_par_updated/w?flag=1
+
+That endpoint returns JSON as ``{"Table": [...]}`` and needs a browser-like
+User-Agent + Referer, otherwise it serves an HTML 404 page with HTTP 200 —
+which shows up as "invalid JSON" rather than a clean HTTP error, so we guard
+for that. This is the current replacement for the retired
+``IPOMainboardCurrentIssue_New`` endpoint.
+
+The feed mixes many instrument types, so only equity public offers
+(``IR_FLAG_FULL`` of ``IPO`` / ``FPO``) are kept — rights issues (RI),
+buybacks, OFS and other instruments on the same page are ignored. Status is
+a single letter: ``F`` (Forthcoming) -> Upcoming and ``L`` (Live) -> Open.
 """
 
 import logging
@@ -15,7 +22,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-_IPO_URL = "https://api.bseindia.com/BseIndiaAPI/api/IPOMainboardCurrentIssue_New/w"
+_IPO_URL = "https://api.bseindia.com/BseIndiaAPI/api/GetPublicIssue_par_updated/w?flag=1"
 
 _HEADERS = {
     "User-Agent": (
@@ -23,20 +30,28 @@ _HEADERS = {
         "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     ),
     "Accept": "application/json, text/plain, */*",
-    "Referer": "https://www.bseindia.com/",
+    "Referer": "https://www.bseindia.com/markets/publicIssues/DisplayIPO.aspx",
 }
 
 _NAME_KEYS = ["Scrip_Name", "SCRIP_NAME", "CompanyName", "IssueName"]
 _STATUS_KEYS = ["Status", "STATUS", "IssueStatus"]
-_OPEN_DATE_KEYS = ["Start_Date", "StartDate", "ISSUE_START_DATE"]
-_CLOSE_DATE_KEYS = ["End_Date", "EndDate", "ISSUE_END_DATE"]
+_OPEN_DATE_KEYS = ["Start_Dt", "StartDate", "ISSUE_START_DATE"]
+_CLOSE_DATE_KEYS = ["End_Dt", "EndDate", "ISSUE_END_DATE"]
 _REGISTRAR_KEYS = ["Registrar", "REGISTRAR_NAME", "RegistrarName"]
+
+# Only these instrument types are equity public offers relevant to an IPO
+# allotment check. The same feed also carries RI (rights issue), OTB, CMN,
+# BuyBack and others under the "Live / Forthcoming Issues" page.
+_EQUITY_IR_FLAGS = {"IPO", "FPO"}
 
 _STATUS_NORMALIZE = {
     "open": "Open",
     "active": "Open",
+    "live": "Open",
+    "l": "Open",          # BSE single-letter status: subscription currently open
     "forthcoming": "Upcoming",
     "upcoming": "Upcoming",
+    "f": "Upcoming",      # BSE single-letter status: not yet open
     "closed": "Closed",
     # "listed" means trading has begun, i.e. allotment is final and the
     # result is available on the registrar portal — the only state where an
@@ -86,6 +101,9 @@ def fetch_bse_ipos() -> list[dict]:
     parsed = []
     for row in rows:
         if not isinstance(row, dict):
+            continue
+        ir_flag = str(row.get("IR_FLAG_FULL") or row.get("IR_flag") or "").strip().upper()
+        if ir_flag not in _EQUITY_IR_FLAGS:
             continue
         name = _first(row, _NAME_KEYS)
         status = _normalize_status(_first(row, _STATUS_KEYS))

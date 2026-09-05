@@ -27,8 +27,8 @@ services:
         generateValue: true        # random per service; never store a real/shared secret in git
         sync: false                # set manually; not overwritten on re-sync
       - key: CORS_ORIGINS
-        value: https://YOUR-VERCEL-APP.vercel.app
-        sync: false                # update after the Vercel frontend is deployed
+        value: https://ipoallotmentchecker.vercel.app
+        sync: false
       # --- MySQL (managed database below) ---
       - key: MYSQL_HOST
         fromDatabase:
