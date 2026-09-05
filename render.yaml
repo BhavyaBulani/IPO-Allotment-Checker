@@ -15,7 +15,12 @@ services:
     runtime: python
     plan: free
     rootDir: IPO_Checker/backend
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt && playwright install --with-deps chromium
+    # NOTE: --with-deps is intentionally omitted. Render's native Python build
+    # runs as a non-root user and `playwright install --with-deps` tries to `su
+    # root` for apt-get, which fails with "su: Authentication failure". Render
+    # already points PLAYWRIGHT_BROWSERS_PATH at a writable cache, so a plain
+    # `playwright install chromium` downloads the browser without needing root.
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt && playwright install chromium
     startCommand: alembic upgrade head && python scripts/seed_registrars.py && uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
