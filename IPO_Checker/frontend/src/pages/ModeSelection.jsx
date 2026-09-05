@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { User, FileSpreadsheet, ArrowRight, Users } from 'lucide-react';
+import { User, FileSpreadsheet, ArrowRight, Users, Landmark } from 'lucide-react';
 import ClientUploadModal from '../components/ClientUploadModal';
+import IpoUploadModal from '../components/IpoUploadModal';
 
 export default function ModeSelection() {
   const [showClientUpload, setShowClientUpload] = useState(false);
+  const [showIpoUpload, setShowIpoUpload] = useState(false);
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black">
@@ -42,6 +44,14 @@ export default function ModeSelection() {
 
       <div className="mt-8 flex flex-wrap justify-center gap-4">
         <button 
+          onClick={() => setShowIpoUpload(true)} 
+          className="inline-flex items-center text-slate-400 hover:text-white transition-colors bg-emerald-500/10 hover:bg-emerald-500/20 px-6 py-3 rounded-xl border border-emerald-500/20 hover:border-emerald-500/40"
+        >
+          <Landmark size={20} className="mr-2 text-emerald-400" />
+          Upload IPO List
+        </button>
+
+        <button 
           onClick={() => setShowClientUpload(true)} 
           className="inline-flex items-center text-slate-400 hover:text-white transition-colors bg-violet-500/10 hover:bg-violet-500/20 px-6 py-3 rounded-xl border border-violet-500/20 hover:border-violet-500/40"
         >
@@ -56,6 +66,7 @@ export default function ModeSelection() {
       </div>
 
       <ClientUploadModal isOpen={showClientUpload} onClose={() => setShowClientUpload(false)} />
+      <IpoUploadModal isOpen={showIpoUpload} onClose={() => setShowIpoUpload(false)} />
     </div>
   );
 }
