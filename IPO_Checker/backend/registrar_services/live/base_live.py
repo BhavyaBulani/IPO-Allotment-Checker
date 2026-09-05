@@ -9,6 +9,7 @@ so a stale selector degrades to "could not check" — never to a fabricated
 
 import logging
 import os
+import re
 from abc import abstractmethod
 
 from db.models import ResultStatus
@@ -25,12 +26,20 @@ def normalize_pan(value) -> str | None:
     return text or None
 
 
+_PAN_FIELD_RE = re.compile(r"\bPAN\b")
+
+
 def find_pan_field(mapping) -> str | None:
-    """Return the first non-empty PAN-looking value in a dict, or None."""
+    """Return the first non-empty PAN-looking value in a dict, or None.
+
+    Uses a word-boundary match (``\bPAN\b``) so a key like ``CompanyName``
+    — which contains the letters "PAN" inside "company" — is not mistaken for
+    a PAN identifier field.
+    """
     if not isinstance(mapping, dict):
         return None
     for key, value in mapping.items():
-        if "PAN" in str(key).upper():
+        if _PAN_FIELD_RE.search(str(key).upper()):
             pan = normalize_pan(value)
             if pan:
                 return pan

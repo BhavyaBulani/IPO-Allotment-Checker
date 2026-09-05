@@ -26,6 +26,7 @@ Selectors validated against the live DOM on 25-08-2026.
 """
 
 import json
+import re
 import xml.etree.ElementTree as ET
 
 from db.models import ResultStatus
@@ -59,10 +60,19 @@ def _child(elem, name: str):
     return None
 
 
+_PAN_FIELD_RE = re.compile(r"\bPAN\b")
+
+
 def _row_pan(row) -> str | None:
-    """Return a non-empty PAN value from an XML result row, or None."""
+    """Return a non-empty PAN value from an XML result row, or None.
+
+    Uses a word-boundary match (``\bPAN\b``) so a field like ``companyname``
+    — which contains the letters "PAN" inside "company" — is not mistaken for
+    a PAN identifier field. Link Intime's allotment rows carry the applicant's
+    ``NAME1`` and ``DPCLITID``, not necessarily a PAN field.
+    """
     for child in row:
-        if "PAN" in _local(child.tag).upper():
+        if _PAN_FIELD_RE.search(_local(child.tag).upper()):
             pan = normalize_pan(child.text)
             if pan:
                 return pan
