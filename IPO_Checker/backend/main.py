@@ -12,6 +12,17 @@ from api.router import api_router
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Playwright downloads browsers to ~/.cache/ms-playwright by default, but
+# Render does not carry /opt/render/.cache from the build into the runtime
+# filesystem (this service uses the "no-cache" profile). Pin the browser cache
+# inside the deployed backend directory instead, so the Chromium installed at
+# build time is present when the registrar-dropdown / live-check scrapers launch
+# it. The build command installs into $PWD/.playwright-cache for the same reason.
+os.environ.setdefault(
+    "PLAYWRIGHT_BROWSERS_PATH",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), ".playwright-cache"),
+)
+
 # Sync interval in seconds (4 hours)
 IPO_SYNC_INTERVAL_SECONDS = 4 * 60 * 60
 

@@ -82,6 +82,10 @@ IPO_Checker/backend.zip
 captcha_images/
 IPO_Checker/backend/captcha_images/
 
+# Playwright browser cache (built at deploy time, not committed)
+.playwright-cache/
+IPO_Checker/backend/.playwright-cache/
+
 # ========================
 # Docker
 # ========================
