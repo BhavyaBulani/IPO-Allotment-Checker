@@ -318,7 +318,7 @@ async def check_bulk_upload(
 
     # Create UploadBatch
     from db.models import UploadBatch, BatchIPO, BatchStatus, Client
-    from queue.worker import process_batch
+    from task_queue.worker import process_batch
 
     batch = UploadBatch(
         file_name=file.filename,
