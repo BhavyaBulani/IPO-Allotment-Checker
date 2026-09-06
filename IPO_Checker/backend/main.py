@@ -195,7 +195,14 @@ app = FastAPI(title="IPO Allotment Verification API", lifespan=lifespan)
 # (comma-separated) so the wildcard is never used with credentials.
 def _cors_origins() -> list[str]:
     raw = os.environ.get("CORS_ORIGINS", "http://localhost:5173").strip()
-    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+    origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
+    # The production SPA is served from Vercel and calls this API directly from
+    # the browser, so its origin must always be allowed. A stale/missing
+    # CORS_ORIGINS env var must never leave the live frontend CORS-blocked.
+    for origin in ("https://ipoallotmentchecker.vercel.app", "http://localhost:5173"):
+        if origin not in origins:
+            origins.append(origin)
+    return origins
 
 app.add_middleware(
     CORSMiddleware,
