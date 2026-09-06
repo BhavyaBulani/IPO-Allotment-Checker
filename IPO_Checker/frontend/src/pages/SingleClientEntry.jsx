@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Search, Loader2, ChevronDown, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Search, Loader2, AlertCircle } from 'lucide-react';
+import IpoSelect from '../components/IpoSelect';
 import api from '../lib/api';
 
 export default function SingleClientEntry() {
@@ -12,6 +13,7 @@ export default function SingleClientEntry() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
     const fetchCheckableIpos = async () => {
@@ -51,6 +53,26 @@ export default function SingleClientEntry() {
   };
 
   const selectedIpo = ipos.find((ipo) => String(ipo.id) === String(selectedIpoId));
+
+  const handleDeleteIpo = async (ipo) => {
+    const id = ipo.id;
+    if (!window.confirm(
+      `Delete IPO "${ipo.name}"?\n\nThis removes it from the dropdown along with its saved check results. You can restore it later by re-uploading the IPO list.`
+    )) {
+      return;
+    }
+    setDeletingId(id);
+    setError(null);
+    try {
+      await api.delete(`/ipos/${id}`);
+      setIpos((prev) => prev.filter((item) => String(item.id) !== String(id)));
+      if (String(selectedIpoId) === String(id)) setSelectedIpoId('');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to delete IPO.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-900 p-6">
@@ -96,20 +118,14 @@ export default function SingleClientEntry() {
                 </div>
               ) : (
                 <div className="relative">
-                  <select
+                  <IpoSelect
+                    ipos={ipos}
                     value={selectedIpoId}
-                    onChange={(e) => setSelectedIpoId(e.target.value)}
-                    className="w-full appearance-none bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner cursor-pointer disabled:opacity-50"
-                    required
-                  >
-                    <option value="" disabled>Select an IPO to check</option>
-                    {ipos.map((ipo) => (
-                      <option key={ipo.id} value={ipo.id} className="bg-slate-900">
-                        {ipo.name}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown size={20} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                    onChange={setSelectedIpoId}
+                    onDelete={handleDeleteIpo}
+                    deletingId={deletingId}
+                  />
+                  <p className="text-xs text-slate-500 mt-2">Type to search, and use the trash icon to remove an unnecessary IPO.</p>
                 </div>
               )}
             </div>

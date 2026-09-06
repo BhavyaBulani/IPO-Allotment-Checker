@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from api.deps import require_auth
-from db.models import IPO, IPOStatus, Registrar
+from db.models import AllotmentResult, BatchIPO, IPO, IPOStatus, Registrar
 from db.session import get_db
 from ipo_sync.registrar_map import resolve_registrar_name
 
@@ -334,4 +334,38 @@ async def upload_ipo_list(
         "total_rows": len(df),
         "unmapped_registrars": unmapped[:10],
         "errors": errors[:10],
+    }
+
+
+@router.delete("/{ipo_id}", dependencies=[Depends(require_auth)])
+def delete_ipo(ipo_id: int, db: Session = Depends(get_db)):
+    """Delete an IPO and its saved check results / batch links.
+
+    Lets an admin remove unnecessary IPOs from the dashboard dropdown. Any IPO
+    deleted here can be restored by re-uploading its list file through the
+    upload endpoint, which recreates it as a validated record.
+    """
+    ipo = db.query(IPO).filter(IPO.id == ipo_id).first()
+    if ipo is None:
+        raise HTTPException(status_code=404, detail="IPO not found.")
+
+    name = ipo.name
+
+    # ``batch_ipos`` and ``allotment_results`` reference ``ipos.id`` with
+    # restrictive foreign keys, so clear those rows first or MySQL rejects the
+    # IPO delete. RunLogs stay intact (they reference the batch, not the IPO).
+    db.query(AllotmentResult).filter(AllotmentResult.ipo_id == ipo_id).delete(
+        synchronize_session=False
+    )
+    db.query(BatchIPO).filter(BatchIPO.ipo_id == ipo_id).delete(
+        synchronize_session=False
+    )
+
+    db.delete(ipo)
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Deleted IPO '{name}' and its saved check results.",
+        "ipo_id": ipo_id,
     }
