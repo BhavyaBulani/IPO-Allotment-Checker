@@ -1,0 +1,1 @@
+chore: remove root vercel.json; deploy the frontend subfolder directly
