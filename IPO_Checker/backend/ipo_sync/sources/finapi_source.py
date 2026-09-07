@@ -8,10 +8,11 @@ cloud-IP blocking.
 
 Status handling
 ---------------
-FinAPI reports ``status`` as LIVE / UPCOMING / CLOSED. "listed" is derived
-from ``schedule.listingDate`` being in the past -> ``Allotment Announced``,
-matching the convention used by every other source (listing means allotment
-is final and the result is checkable on the registrar portal).
+FinAPI reports ``status`` as LIVE / UPCOMING / CLOSED. A past
+``schedule.listingDate`` maps to ``Closed`` (the subscription window has
+ended). "Allotment Announced" is NOT derived from a listing date: that status
+is only set when a registrar's own portal lists the issue, so a check never
+returns a false "Not Allotted".
 
 Registrar
 ---------
@@ -55,9 +56,13 @@ def _parse_date(value):
 
 
 def _derive_status(raw_status, listing_date, today) -> str | None:
+    # A past listing date is NOT proof that the registrar has published the
+    # allotment result. Report "Closed" and let registrar dropdown discovery
+    # promote it to "Allotment Announced" only when the portal actually lists
+    # the issue — otherwise a check would return a false "Not Allotted".
     listing = _parse_date(listing_date)
     if listing and today > listing:
-        return "Allotment Announced"
+        return "Closed"
     return _STATUS_MAP.get(str(raw_status or "").strip().upper())
 
 

@@ -165,16 +165,21 @@ def _clean_text(value) -> str | None:
 
 
 def _resolve_registrar(db, raw_name: str | None):
-    """Return (registrar_id, canonical_name). registrar_id is None when unmapped."""
+    """Return (registrar_id, canonical_name, active).
+
+    registrar_id is None when the name is unmapped or the registrar is not
+    seeded; active is False when the registrar is seeded but has no live
+    integration (so it cannot be checked correctly yet).
+    """
     if not raw_name:
-        return None, None
+        return None, None, True
     canonical = resolve_registrar_name(raw_name)
     if not canonical:
-        return None, None
+        return None, None, True
     registrar = db.query(Registrar).filter(Registrar.name == canonical).first()
     if not registrar:
-        return None, canonical
-    return registrar.id, canonical
+        return None, canonical, True
+    return registrar.id, canonical, registrar.active
 
 
 def _make_manual_external_id(normalized_name: str) -> str:
@@ -196,9 +201,12 @@ async def upload_ipo_list(
       - Registrar / RTA                    (optional, strongly recommended)
 
     Uploaded rows are treated as curated by the brokerage and are published
-    immediately (validated=True, source=manual-upload), so they appear in the
-    single-check dropdown. Rows whose registrar cannot be mapped are still saved
-    but surface in ``unmapped_registrars`` so an admin can fix the mapping.
+    immediately (validated=True, source=manual-upload) when their registrar is
+    mapped and has a live integration, so they appear in the single-check
+    dropdown. Rows whose registrar cannot be mapped (or whose registrar has no
+    live integration yet) are saved but held for review (validated=False) and
+    surface in ``unmapped_registrars`` so an admin can fix the mapping before
+    they become checkable.
     """
     lower_name = (file.filename or "").lower()
     if not (
@@ -273,12 +281,26 @@ async def upload_ipo_list(
         close_dt = _parse_date(row.get(close_col)) if close_col is not None else None
         status = _parse_status(row.get(status_col)) if status_col is not None else IPOStatus.Closed
         raw_registrar = _clean_text(row.get(registrar_col)) if registrar_col is not None else None
-        registrar_id, _canonical = _resolve_registrar(db, raw_registrar)
+        registrar_id, _canonical, registrar_active = _resolve_registrar(db, raw_registrar)
 
-        if raw_registrar and registrar_id is None:
+        final_validated = True
+        if not raw_registrar:
+            final_validated = False
+            unmapped.append(
+                f"Row {row_num}: '{name}' — no registrar column provided; "
+                "IPO held for review (add a Registrar/RTA column to make it checkable)."
+            )
+        elif registrar_id is None:
+            final_validated = False
             unmapped.append(
                 f"Row {row_num}: '{name}' — registrar '{raw_registrar}' not recognized; "
-                "IPO saved without a mapped registrar."
+                "IPO held for review (not added to the check dropdown)."
+            )
+        elif not registrar_active:
+            final_validated = False
+            unmapped.append(
+                f"Row {row_num}: '{name}' — registrar '{raw_registrar}' has no live "
+                "integration yet; IPO held for review."
             )
 
         normalized = _normalize_name(name)
@@ -295,8 +317,8 @@ async def upload_ipo_list(
             if registrar_id is not None and existing.registrar_id != registrar_id:
                 existing.registrar_id = registrar_id
                 changed = True
-            if not existing.validated:
-                existing.validated = True
+            if existing.validated != final_validated:
+                existing.validated = final_validated
                 changed = True
             existing.source = "manual-upload"
             if changed:
@@ -312,7 +334,7 @@ async def upload_ipo_list(
                 close_date=close_dt,
                 synced_at=datetime.utcnow(),
                 auto_detected=False,
-                validated=True,
+                validated=final_validated,
                 registrar_id=registrar_id,
             )
             db.add(new_ipo)

@@ -14,7 +14,8 @@ dates the same way the standalone ``tools/ipotracker`` probe does:
     upcoming: today < opening_date
     open:     opening_date <= today <= closing_date
     closed:   closing_date < today <= listing_date
-    listed:   listing_date < today            -> "Allotment Announced"
+    listed:   listing_date < today            -> "Closed"  (promoted to
+               "Allotment Announced" only when a registrar portal lists it)
 
 Environment variables (all required; missing any -> the source logs and
 returns [] rather than raising):
@@ -46,7 +47,7 @@ _STATUS_MAP = {
     "upcoming": "Upcoming",
     "open": "Open",
     "closed": "Closed",
-    "listed": "Allotment Announced",
+    "listed": "Closed",
 }
 
 # ipotracker's display ``name`` often carries a trailing "- IPO" or " IPO"

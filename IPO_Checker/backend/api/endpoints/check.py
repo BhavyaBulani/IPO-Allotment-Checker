@@ -25,18 +25,21 @@ def validate_pan(pan: str) -> bool:
     return bool(re.match(r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$', pan.upper()))
 
 
-# Only these stages have a final allotment list to query. Checking a PAN
-# against an IPO that is still Open/Upcoming yields a fabricated "Not
-# Allotted" (the registrar simply has no record yet), so we never do it.
-_CHECKABLE_STATUSES = (IPOStatus.Closed, IPOStatus.Allotment_Announced)
+# Only IPOs whose allotment has actually been announced are checkable.
+# Checking a PAN against an IPO that is still Open/Upcoming/Closed yields a
+# fabricated "Not Allotted" (the registrar simply has no record yet), so we
+# never do it. "Allotment Announced" is set only when a registrar's own
+# allotment portal lists the issue (registrar dropdown discovery) or an admin
+# manually uploads it as announced — never derived from a listing date.
+_CHECKABLE_STATUSES = (IPOStatus.Allotment_Announced,)
 
 _NO_CHECKABLE_IPOS_MSG = (
-    "No checkable IPOs (Closed or Allotment Announced) are available right now. "
+    "No checkable IPOs (Allotment Announced) are available right now. "
 )
 
 
 def _checkable_ipos(db):
-    """Return only Closed or Allotment Announced IPOs to check their allotment status."""
+    """Return only Allotment Announced IPOs to check their allotment status."""
     return (
         db.query(IPO)
         .filter(IPO.validated == True, IPO.status.in_(_CHECKABLE_STATUSES))

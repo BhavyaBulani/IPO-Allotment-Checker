@@ -225,7 +225,7 @@ def _resolve_registrar_id(db, registrar_name: str | None) -> int | None:
     return registrar.id
 
 
-def _upsert(db, record: ReconciledIPO, existing_by_name: dict[str, IPO]) -> str:
+def _upsert(db, record: ReconciledIPO, existing_by_name: dict[str, IPO], inactive_registrar_ids: set[int] | None = None) -> str:
     """Returns 'added', 'updated', or 'unchanged'."""
     status_enum = _STATUS_MAP.get(record.status, IPOStatus.Upcoming)
     is_valid_shape = is_sane_ipo(record.name, status_enum)
@@ -238,6 +238,14 @@ def _upsert(db, record: ReconciledIPO, existing_by_name: dict[str, IPO]) -> str:
         # Mapped to a name, but that registrar isn't seeded in the DB yet —
         # don't auto-publish an IPO we can't route a check for.
         final_validated = False
+
+    if registrar_id is not None and inactive_registrar_ids and registrar_id in inactive_registrar_ids:
+        # Mapped to a registrar, but that registrar has no live integration
+        # (active=False). Publishing it as checkable would only produce
+        # "Website Error" verdicts, so hold it for review instead.
+        final_validated = False
+
+    record.validated = final_validated
 
     # Matched by normalized name, not external_id: NSE/BSE don't give us a
     # stable id we can rely on across sources or across sync runs, and a
@@ -358,8 +366,11 @@ def sync_ipos(include_registrar_dropdown: bool | None = None) -> dict:
         existing_by_name = {
             _normalize_name_for_match(ipo.name): ipo for ipo in db.query(IPO).all()
         }
+        inactive_registrar_ids = {
+            r.id for r in db.query(Registrar).filter(Registrar.active == False).all()
+        }
         for record in records:
-            outcome = _upsert(db, record, existing_by_name)
+            outcome = _upsert(db, record, existing_by_name, inactive_registrar_ids)
             if outcome == "added":
                 added += 1
             elif outcome == "updated":

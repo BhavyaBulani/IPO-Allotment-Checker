@@ -30,8 +30,11 @@ _STATUS_MAP = {
     "upcoming": "Upcoming",
     "open": "Open",
     "closed": "Closed",
-    # "listed" means trading has begun, i.e. allotment is final and checkable.
-    "listed": "Allotment Announced",
+    # "listed" means trading has begun. Keep it "Closed" — "Allotment
+    # Announced" must only come from a registrar's own portal (dropdown
+    # discovery), never from a listing date, or checks would return a false
+    # "Not Allotted".
+    "listed": "Closed",
 }
 
 

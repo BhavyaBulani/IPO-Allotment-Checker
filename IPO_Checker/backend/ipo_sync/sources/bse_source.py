@@ -53,10 +53,11 @@ _STATUS_NORMALIZE = {
     "upcoming": "Upcoming",
     "f": "Upcoming",      # BSE single-letter status: not yet open
     "closed": "Closed",
-    # "listed" means trading has begun, i.e. allotment is final and the
-    # result is available on the registrar portal — the only state where an
-    # allotment check can return a real verdict.
-    "listed": "Allotment Announced",
+    # "listed" means trading has begun. It must NOT be treated as "Allotment
+    # Announced" here: allotment is only checkable once the registrar's own
+    # portal lists the issue (see registrar_dropdown_source), otherwise a
+    # check would return a false "Not Allotted". Keep it "Closed" until then.
+    "listed": "Closed",
 }
 
 
