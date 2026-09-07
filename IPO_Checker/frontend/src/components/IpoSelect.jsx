@@ -95,19 +95,19 @@ export default function IpoSelect({ ipos, value, onChange, onDelete, deletingId 
           }}
           onKeyDown={onKeyDown}
           placeholder="Search IPO by name..."
-          className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 pl-10 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner"
+          className="input pl-10"
         />
-        <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+        <Search size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
         <ChevronDown
           size={18}
-          className={`absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-stone-400 transition-transform ${open ? 'rotate-180' : ''}`}
         />
       </div>
 
       {open && (
-        <div className="absolute z-20 mt-2 w-full bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-h-72 overflow-y-auto">
+        <div className="absolute z-20 mt-2 max-h-72 w-full overflow-y-auto rounded-xl border border-stone-200 bg-white shadow-xl">
           {filtered.length === 0 ? (
-            <div className="px-4 py-6 text-center text-slate-500 text-sm">
+            <div className="px-4 py-6 text-center text-sm text-stone-400">
               No IPOs match "{query}"
             </div>
           ) : (
@@ -116,13 +116,13 @@ export default function IpoSelect({ ipos, value, onChange, onDelete, deletingId 
                 key={ipo.id}
                 onMouseEnter={() => setHighlight(idx)}
                 onClick={() => choose(ipo)}
-                className={`flex items-center justify-between gap-3 px-4 py-2.5 cursor-pointer text-sm border-b border-slate-700/50 last:border-0 transition-colors ${
-                  idx === highlight ? 'bg-slate-700' : ''
-                } ${String(ipo.id) === String(value) ? 'bg-indigo-500/10' : ''}`}
+                className={`flex cursor-pointer items-center justify-between gap-3 border-b border-stone-100 px-4 py-2.5 text-sm transition-colors last:border-0 ${
+                  idx === highlight ? 'bg-stone-100' : ''
+                } ${String(ipo.id) === String(value) ? 'bg-teal-50' : ''}`}
               >
-                <div className="flex-1 min-w-0">
-                  <p className="text-white truncate">{ipo.name}</p>
-                  <p className="text-[11px] text-slate-500">{ipo.status}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-stone-900">{ipo.name}</p>
+                  <p className="text-[11px] text-stone-400">{ipo.status}</p>
                 </div>
                 <button
                   type="button"
@@ -132,7 +132,7 @@ export default function IpoSelect({ ipos, value, onChange, onDelete, deletingId 
                   }}
                   disabled={deletingId === ipo.id}
                   title="Delete this IPO"
-                  className="shrink-0 p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-colors disabled:opacity-50"
+                  className="shrink-0 rounded-lg border border-transparent p-2 text-stone-400 transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
                 >
                   {deletingId === ipo.id ? (
                     <Loader2 size={16} className="animate-spin" />

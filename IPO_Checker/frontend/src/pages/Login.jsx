@@ -28,27 +28,30 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
-      <div className="glass-panel rounded-3xl p-8 md:p-10 w-full max-w-md relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+    <div className="relative flex min-h-[calc(100vh-4rem)] items-center justify-center overflow-hidden bg-[#f6f5f0] p-6">
+      <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-teal-200/40 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-amber-200/30 blur-3xl" />
+
+      <div className="glass-panel relative w-full max-w-md overflow-hidden rounded-3xl p-8 md:p-10">
+        <div className="pointer-events-none absolute top-0 right-0 h-48 w-48 translate-x-1/2 -translate-y-1/2 rounded-full bg-teal-200/40 blur-3xl" />
 
         <div className="relative z-10">
-          <div className="h-14 w-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center mb-6 border border-indigo-500/20">
-            <Lock size={28} className="text-indigo-400" />
+          <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-teal-200 bg-teal-50">
+            <Lock size={28} className="text-teal-700" />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Sign in</h1>
-          <p className="text-slate-400 mb-8">Enter the application password to continue.</p>
+          <h1 className="mb-2 text-2xl font-bold text-stone-900">Sign in</h1>
+          <p className="mb-8 text-stone-500">Enter the application password to continue.</p>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
+              <label className="label">Password</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 autoFocus
-                className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner"
+                className="input"
                 required
               />
             </div>
@@ -56,7 +59,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading || !password}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-6 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20"
+              className="btn-primary w-full"
             >
               {loading ? <Loader2 className="animate-spin" size={20} /> : <Lock size={18} />}
               {loading ? 'Signing in...' : 'Sign in'}
@@ -64,7 +67,7 @@ export default function Login() {
           </form>
 
           {error && (
-            <div className="mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
+            <div className="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
               {error}
             </div>
           )}

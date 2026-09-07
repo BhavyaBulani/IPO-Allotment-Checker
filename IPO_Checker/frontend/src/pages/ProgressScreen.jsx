@@ -34,11 +34,11 @@ export default function ProgressScreen() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-900 p-6 flex items-center justify-center">
-        <div className="bg-red-500/10 p-6 rounded-2xl border border-red-500/30 text-red-400 flex items-center gap-4">
+      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-[#f6f5f0] p-6">
+        <div className="flex items-center gap-4 rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-700">
           <AlertCircle size={32} />
           <div>
-            <h3 className="font-bold text-lg mb-1">Error</h3>
+            <h3 className="mb-1 text-lg font-bold">Error</h3>
             <p>{error}</p>
           </div>
         </div>
@@ -48,8 +48,8 @@ export default function ProgressScreen() {
 
   if (!data) {
     return (
-      <div className="min-h-screen bg-slate-900 p-6 flex items-center justify-center text-slate-400">
-        <Loader2 className="animate-spin mr-3" size={24} /> Loading batch {batchId}...
+      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-[#f6f5f0] p-6 text-stone-500">
+        <Loader2 className="mr-3 animate-spin" size={24} /> Loading batch {batchId}...
       </div>
     );
   }
@@ -57,76 +57,76 @@ export default function ProgressScreen() {
   const isComplete = data.status === 'Completed';
 
   return (
-    <div className="min-h-screen bg-slate-900 p-6">
-      <div className="max-w-3xl mx-auto pt-10">
-        <Link to="/" className="inline-flex items-center text-slate-400 hover:text-white mb-8 transition-colors">
+    <div className="min-h-[calc(100vh-4rem)] bg-[#f6f5f0] p-6">
+      <div className="mx-auto max-w-3xl pt-10">
+        <Link to="/" className="back-link mb-8">
           <ArrowLeft size={20} className="mr-2" /> Back to Home
         </Link>
         
-        <div className="glass-panel rounded-3xl p-8 md:p-10 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+        <div className="glass-panel relative overflow-hidden rounded-3xl p-8 md:p-10">
+          <div className="pointer-events-none absolute top-0 right-0 h-64 w-64 translate-x-1/2 -translate-y-1/2 rounded-full bg-teal-200/40 blur-3xl" />
           
-          <div className="flex justify-between items-start mb-8 relative z-10">
+          <div className="relative z-10 mb-8 flex items-start justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-white mb-2">Processing Batch #{batchId}</h1>
+              <h1 className="mb-2 text-3xl font-bold text-stone-900">Processing Batch #{batchId}</h1>
               <div className="flex items-center gap-2">
-                <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1
-                  ${data.status === 'Queued' ? 'bg-slate-700 text-slate-300' : 
-                    data.status === 'In Progress' ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 
-                    data.status === 'Completed' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
-                    'bg-red-500/20 text-red-400 border border-red-500/30'}`}
+                <span className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold
+                  ${data.status === 'Queued' ? 'border-stone-200 bg-stone-100 text-stone-600' : 
+                    data.status === 'In Progress' ? 'border-teal-200 bg-teal-50 text-teal-700' : 
+                    data.status === 'Completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 
+                    'border-rose-200 bg-rose-50 text-rose-700'}`}
                 >
                   {data.status === 'In Progress' && <RefreshCw size={12} className="animate-spin" />}
                   {data.status === 'Completed' && <CheckCircle2 size={12} />}
                   {data.status === 'Queued' && <Loader2 size={12} className="animate-spin" />}
                   {data.status}
                 </span>
-                <span className="text-slate-500 text-sm">{data.valid_rows} rows valid, {data.invalid_rows} invalid</span>
+                <span className="text-sm text-stone-500">{data.valid_rows} rows valid, {data.invalid_rows} invalid</span>
               </div>
             </div>
             
             <div className="text-right">
-              <div className="text-4xl font-black text-white">{data.progress}%</div>
+              <div className="text-4xl font-black text-stone-900">{data.progress}%</div>
             </div>
           </div>
 
-          <div className="space-y-8 relative z-10">
+          <div className="relative z-10 space-y-8">
             {/* Progress Bar */}
-            <div className="w-full bg-slate-800 rounded-full h-4 overflow-hidden border border-slate-700 shadow-inner">
+            <div className="h-4 w-full overflow-hidden rounded-full border border-stone-200 bg-stone-200 shadow-inner">
               <div 
-                className={`h-full rounded-full transition-all duration-500 ease-out ${isComplete ? 'bg-emerald-500' : 'bg-gradient-to-r from-indigo-500 to-cyan-400 relative'}`}
+                className={`relative h-full rounded-full transition-all duration-500 ease-out ${isComplete ? 'bg-emerald-500' : 'bg-gradient-to-r from-teal-600 to-cyan-500'}`}
                 style={{ width: `${data.progress}%` }}
               >
                 {!isComplete && (
-                   <div className="absolute inset-0 bg-white/20 animate-pulse rounded-full" />
+                   <div className="absolute inset-0 animate-pulse rounded-full bg-white/20" />
                 )}
               </div>
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700 text-center shadow-sm">
-                <p className="text-slate-400 text-sm mb-1">Expected Checks</p>
-                <p className="text-white text-2xl font-bold">{data.total_expected}</p>
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <div className="rounded-2xl border border-stone-200 bg-white p-4 text-center shadow-sm">
+                <p className="mb-1 text-sm text-stone-400">Expected Checks</p>
+                <p className="text-2xl font-bold text-stone-900">{data.total_expected}</p>
               </div>
-              <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700 text-center shadow-sm">
-                <p className="text-slate-400 text-sm mb-1">Completed</p>
-                <p className="text-white text-2xl font-bold">{data.completed}</p>
+              <div className="rounded-2xl border border-stone-200 bg-white p-4 text-center shadow-sm">
+                <p className="mb-1 text-sm text-stone-400">Completed</p>
+                <p className="text-2xl font-bold text-stone-900">{data.completed}</p>
               </div>
-              <div className="bg-emerald-500/5 p-4 rounded-2xl border border-emerald-500/20 text-center shadow-sm">
-                <p className="text-emerald-400/80 text-sm mb-1">Successful</p>
-                <p className="text-emerald-400 text-2xl font-bold">{data.successful_checks}</p>
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-center shadow-sm">
+                <p className="mb-1 text-sm text-emerald-700/70">Successful</p>
+                <p className="text-2xl font-bold text-emerald-700">{data.successful_checks}</p>
               </div>
-              <div className="bg-amber-500/5 p-4 rounded-2xl border border-amber-500/20 text-center shadow-sm">
-                <p className="text-amber-400/80 text-sm mb-1">Invalid/Errors</p>
-                <p className="text-amber-400 text-2xl font-bold">{data.invalid_data + data.errors}</p>
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-center shadow-sm">
+                <p className="mb-1 text-sm text-amber-700/70">Invalid/Errors</p>
+                <p className="text-2xl font-bold text-amber-700">{data.invalid_data + data.errors}</p>
               </div>
             </div>
             
             {isComplete && (
-              <div className="mt-8 pt-6 border-t border-slate-700 text-center animate-fade-in-up">
-                <p className="text-slate-400 mb-4">Processing is complete!</p>
-                <Link to={`/results/${batchId}`} className="inline-block bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-8 rounded-xl transition-all shadow-lg shadow-indigo-500/20">
+              <div className="animate-fade-in-up mt-8 border-t border-stone-200 pt-6 text-center">
+                <p className="mb-4 text-stone-500">Processing is complete!</p>
+                <Link to={`/results/${batchId}`} className="btn-primary px-8">
                   View Results Dashboard
                 </Link>
               </div>

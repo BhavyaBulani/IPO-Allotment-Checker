@@ -47,28 +47,28 @@ const CaptchaPrompt = () => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
-            <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md animate-in zoom-in-95">
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 bg-amber-100 text-amber-600 rounded-lg">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4 backdrop-blur-sm">
+            <div className="animate-fade-in w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-2xl">
+                <div className="mb-4 flex items-center gap-3">
+                    <div className="rounded-lg bg-amber-100 p-2 text-amber-700">
                         <ShieldAlert size={24} />
                     </div>
-                    <h2 className="text-xl font-semibold text-gray-800">CAPTCHA Required</h2>
+                    <h2 className="text-xl font-semibold text-stone-900">CAPTCHA Required</h2>
                 </div>
 
-                <p className="text-gray-600 mb-4 text-sm">
+                <p className="mb-4 text-sm text-stone-500">
                     A registrar website requires manual verification. Please solve the CAPTCHA to continue the background check.
                 </p>
 
-                <div className="bg-gray-100 rounded-lg p-4 mb-4 flex justify-center items-center min-h-[100px]">
+                <div className="mb-4 flex min-h-[100px] items-center justify-center rounded-lg bg-stone-100 p-4">
                     {currentCaptcha.image_base64 ? (
-                        <div className="text-center font-mono text-xl tracking-widest text-gray-700 font-bold border-2 border-dashed border-gray-300 p-4 rounded bg-gray-50">
+                        <div className="rounded border-2 border-dashed border-stone-300 bg-stone-50 p-4 text-center font-mono text-xl font-bold tracking-widest text-stone-700">
                             {/* In a real scenario, this would be an image tag decoding base64 */}
                             {/* <img src={`data:image/png;base64,${currentCaptcha.image_base64}`} alt="CAPTCHA" /> */}
                             Q7W9B
                         </div>
                     ) : (
-                        <span className="text-gray-400">Loading image...</span>
+                        <span className="text-stone-400">Loading image...</span>
                     )}
                 </div>
 
@@ -79,21 +79,21 @@ const CaptchaPrompt = () => {
                         value={solution}
                         onChange={(e) => setSolution(e.target.value)}
                         disabled={submitting}
-                        className="w-full border-2 border-gray-200 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all font-mono text-center text-lg mb-4"
+                        className="mb-4 w-full rounded-lg border-2 border-stone-200 px-4 py-3 text-center font-mono text-lg focus:border-teal-600 focus:outline-none focus:ring-4 focus:ring-teal-600/20"
                         autoFocus
                     />
 
                     <button
                         type="submit"
                         disabled={!solution.trim() || submitting}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="btn-primary w-full"
                     >
                         {submitting ? 'Submitting...' : 'Submit Solution'}
                     </button>
                 </form>
 
                 {pendingCaptchas.length > 1 && (
-                    <p className="text-xs text-center text-gray-500 mt-4">
+                    <p className="mt-4 text-center text-xs text-stone-400">
                         {pendingCaptchas.length - 1} more CAPTCHA(s) pending...
                     </p>
                 )}

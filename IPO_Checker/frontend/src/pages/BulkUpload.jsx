@@ -48,54 +48,54 @@ export default function BulkUpload() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 p-6">
-      <div className="max-w-4xl mx-auto pt-10">
-        <Link to="/" className="inline-flex items-center text-slate-400 hover:text-white mb-8 transition-colors">
+    <div className="min-h-[calc(100vh-4rem)] bg-[#f6f5f0] p-6">
+      <div className="mx-auto max-w-4xl pt-10">
+        <Link to="/" className="back-link mb-8">
           <ArrowLeft size={20} className="mr-2" /> Back to Mode Selection
         </Link>
         
-        <div className="glass-panel rounded-3xl p-8 md:p-10 relative">
-          <div className="absolute inset-0 overflow-hidden rounded-3xl pointer-events-none">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+        <div className="glass-panel relative rounded-3xl p-8 md:p-10">
+          <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl">
+            <div className="absolute top-0 right-0 h-64 w-64 translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-200/40 blur-3xl" />
           </div>
           
-          <h1 className="text-3xl font-bold text-white mb-2">Bulk Excel Upload</h1>
-          <p className="text-slate-400 mb-10">Check multiple clients at once by uploading an Excel file.</p>
+          <h1 className="mb-2 text-3xl font-bold text-stone-900">Bulk Excel Upload</h1>
+          <p className="mb-10 text-stone-500">Check multiple clients at once by uploading an Excel file.</p>
 
-          <div className="space-y-8 relative z-10">
+          <div className="relative z-10 space-y-8">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Upload Client List (.xlsx / .xls)</label>
+              <label className="label">Upload Client List (.xlsx / .xls)</label>
               {!file ? (
                 <div 
                   {...getRootProps()} 
                   className={clsx(
-                    "border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all duration-200 group flex flex-col items-center justify-center gap-4",
-                    isDragActive ? "border-emerald-500 bg-emerald-500/10" : "border-slate-700 hover:border-slate-500 hover:bg-slate-800/50"
+                    "group flex cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed p-12 text-center transition-all duration-200",
+                    isDragActive ? "border-amber-400 bg-amber-50" : "border-stone-300 hover:border-stone-400 hover:bg-white"
                   )}
                 >
                   <input {...getInputProps()} />
-                  <div className={clsx("p-4 rounded-full bg-slate-800 transition-colors group-hover:bg-slate-700", isDragActive && "bg-emerald-500/20")}>
-                    <UploadCloud size={40} className={clsx("transition-colors", isDragActive ? "text-emerald-400" : "text-slate-400 group-hover:text-white")} />
+                  <div className={clsx("rounded-full bg-stone-100 p-4 transition-colors group-hover:bg-stone-50", isDragActive && "bg-amber-100")}>
+                    <UploadCloud size={40} className={clsx("transition-colors", isDragActive ? "text-amber-600" : "text-stone-400 group-hover:text-stone-600")} />
                   </div>
                   <div>
-                    <p className="text-slate-300 font-medium text-lg mb-1">
+                    <p className="mb-1 text-lg font-medium text-stone-800">
                       {isDragActive ? "Drop file here..." : "Drag & drop Excel file here"}
                     </p>
-                    <p className="text-slate-500 text-sm">or click to browse from your computer (max 10,000 rows)</p>
+                    <p className="text-sm text-stone-400">or click to browse from your computer (max 10,000 rows)</p>
                   </div>
                 </div>
               ) : (
-                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 flex items-center justify-between shadow-inner">
+                <div className="flex items-center justify-between rounded-xl border border-stone-200 bg-white p-6 shadow-sm">
                   <div className="flex items-center gap-4">
-                    <div className="p-3 bg-emerald-500/20 text-emerald-400 rounded-lg">
+                    <div className="rounded-lg bg-amber-100 p-3 text-amber-700">
                       <FileSpreadsheet size={28} />
                     </div>
                     <div>
-                      <h4 className="text-white font-medium">{file.name}</h4>
-                      <p className="text-slate-400 text-sm">{(file.size / 1024).toFixed(2)} KB</p>
+                      <h4 className="font-medium text-stone-900">{file.name}</h4>
+                      <p className="text-sm text-stone-400">{(file.size / 1024).toFixed(2)} KB</p>
                     </div>
                   </div>
-                  <button onClick={() => setFile(null)} className="p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white transition-colors" title="Remove file">
+                  <button onClick={() => setFile(null)} className="rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700" title="Remove file">
                     <X size={20} />
                   </button>
                 </div>
@@ -105,7 +105,7 @@ export default function BulkUpload() {
             <button 
               onClick={handleUpload}
               disabled={loading || !file}
-              className="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-4 px-6 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 text-lg"
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-600 py-4 text-lg font-semibold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? <Loader2 className="animate-spin" size={24} /> : <UploadCloud size={24} />}
               {loading ? 'Processing Upload & Validating...' : 'Begin Bulk Verification'}
@@ -113,16 +113,14 @@ export default function BulkUpload() {
           </div>
 
           {error && (
-            <div className="mt-8 p-5 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-400 flex items-start gap-4">
-              <AlertCircle className="shrink-0 mt-0.5" />
+            <div className="mt-8 flex items-start gap-4 rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-700">
+              <AlertCircle className="mt-0.5 shrink-0" />
               <div>
-                <h4 className="font-bold text-red-300 mb-1">Validation Failed</h4>
+                <h4 className="mb-1 font-bold text-rose-800">Validation Failed</h4>
                 <p>{error}</p>
               </div>
             </div>
           )}
-
-
         </div>
       </div>
     </div>

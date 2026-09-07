@@ -1,3 +1,109 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --paper: #f6f5f0;
+    --paper-soft: #fbfaf7;
+    --ink: #1c1917;
+    --ink-soft: #44403c;
+    --muted: #78716c;
+    --line: #e7e4dc;
+    --accent: #0f766e;
+    --accent-strong: #115e59;
+    --accent-soft: #ccfbf1;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--paper);
+    color: var(--ink-soft);
+    font-family: "Outfit", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: "Fraunces", Georgia, "Times New Roman", serif;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    background-color: rgba(255, 255, 255, 0.88);
+    border: 1px solid var(--line);
+    box-shadow: 0 24px 50px -28px rgba(28, 25, 23, 0.28);
+    backdrop-filter: blur(10px);
+  }
+
+  .card {
+    @apply rounded-2xl border border-stone-200 bg-white shadow-sm;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-teal-700 px-5 py-3 font-semibold text-white shadow-sm transition-colors hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-5 py-3 font-semibold text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-stone-300 bg-white px-4 py-3 text-stone-800 placeholder:text-stone-400 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20;
+  }
+
+  .label {
+    @apply mb-2 block text-sm font-medium text-stone-600;
+  }
+
+  .back-link {
+    @apply inline-flex items-center text-stone-500 transition-colors hover:text-stone-800;
+  }
+
+  .page-title {
+    @apply text-3xl font-bold text-stone-900;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: "Fraunces", Georgia, "Times New Roman", serif;
+  }
+
+  .animate-fade-in-up {
+    animation: fade-in-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.4s ease both;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

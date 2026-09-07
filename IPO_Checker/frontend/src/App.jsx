@@ -7,6 +7,7 @@ import ResultsDashboard from './pages/ResultsDashboard';
 import HistoryScreen from './pages/HistoryScreen';
 import Login from './pages/Login';
 import CaptchaPrompt from './components/CaptchaPrompt';
+import AppHeader from './components/AppHeader';
 import { isAuthenticated } from './lib/auth';
 
 function Protected({ children }) {
@@ -19,6 +20,7 @@ function Protected({ children }) {
 function App() {
   return (
     <BrowserRouter>
+      <AppHeader />
       <CaptchaPrompt />
       <Routes>
         <Route path="/login" element={<Login />} />

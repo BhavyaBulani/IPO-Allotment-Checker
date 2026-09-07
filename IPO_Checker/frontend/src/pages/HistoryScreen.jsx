@@ -32,29 +32,29 @@ export default function HistoryScreen() {
 
   const getStatusIcon = (status) => {
     switch(status) {
-      case 'Completed': return <CheckCircle2 className="text-emerald-400" size={18} />;
-      case 'Failed': return <XCircle className="text-rose-400" size={18} />;
-      case 'In Progress': return <Loader2 className="animate-spin text-indigo-400" size={18} />;
-      default: return <Clock className="text-slate-400" size={18} />;
+      case 'Completed': return <CheckCircle2 className="text-emerald-600" size={18} />;
+      case 'Failed': return <XCircle className="text-rose-600" size={18} />;
+      case 'In Progress': return <Loader2 className="animate-spin text-teal-600" size={18} />;
+      default: return <Clock className="text-stone-400" size={18} />;
     }
   };
 
   const getStatusBadgeClass = (status) => {
     switch(status) {
-      case 'Completed': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-      case 'Failed': return 'bg-rose-500/10 text-rose-400 border-rose-500/20';
-      case 'In Progress': return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20';
-      default: return 'bg-slate-700 text-slate-300 border-slate-600';
+      case 'Completed': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'Failed': return 'bg-rose-50 text-rose-700 border-rose-200';
+      case 'In Progress': return 'bg-teal-50 text-teal-700 border-teal-200';
+      default: return 'bg-stone-100 text-stone-600 border-stone-200';
     }
   };
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-900 p-6 flex items-center justify-center">
-        <div className="bg-red-500/10 p-6 rounded-2xl border border-red-500/30 text-red-400 flex items-center gap-4">
+      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-[#f6f5f0] p-6">
+        <div className="flex items-center gap-4 rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-700">
           <AlertCircle size={32} />
           <div>
-            <h3 className="font-bold text-lg mb-1">Error Loading History</h3>
+            <h3 className="mb-1 text-lg font-bold">Error Loading History</h3>
             <p>{error}</p>
           </div>
         </div>
@@ -63,53 +63,53 @@ export default function HistoryScreen() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 p-6 pb-20">
-      <div className="max-w-6xl mx-auto pt-8">
-        <Link to="/" className="inline-flex items-center text-slate-400 hover:text-white mb-8 transition-colors">
+    <div className="min-h-[calc(100vh-4rem)] bg-[#f6f5f0] p-6 pb-20">
+      <div className="mx-auto max-w-6xl pt-8">
+        <Link to="/" className="back-link mb-8">
           <ArrowLeft size={20} className="mr-2" /> Back to Home
         </Link>
 
-        <div className="mb-8 relative z-10">
-          <h1 className="text-3xl font-bold text-white mb-2">Run History</h1>
-          <p className="text-slate-400">View and access past batch processing results.</p>
+        <div className="relative z-10 mb-8">
+          <h1 className="mb-2 text-3xl font-bold text-stone-900">Run History</h1>
+          <p className="text-stone-500">View and access past batch processing results.</p>
         </div>
 
-        <div className="bg-slate-800/80 rounded-2xl border border-slate-700 overflow-hidden shadow-xl">
+        <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full border-collapse text-left">
               <thead>
-                <tr className="bg-slate-900/50 border-b border-slate-700 text-slate-400 text-sm">
+                <tr className="border-b border-stone-200 bg-stone-50 text-sm text-stone-500">
                   <th className="px-6 py-4 font-medium">Batch ID</th>
                   <th className="px-6 py-4 font-medium">Upload Date</th>
                   <th className="px-6 py-4 font-medium">File Name</th>
                   <th className="px-6 py-4 font-medium">Valid Rows</th>
                   <th className="px-6 py-4 font-medium">Status</th>
-                  <th className="px-6 py-4 font-medium text-right">Actions</th>
+                  <th className="px-6 py-4 text-right font-medium">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-700">
+              <tbody className="divide-y divide-stone-100">
                 {loading && batches.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="px-6 py-12 text-center text-slate-500">
-                      <Loader2 className="animate-spin inline mr-2" size={20} /> Loading...
+                    <td colSpan="6" className="px-6 py-12 text-center text-stone-400">
+                      <Loader2 className="mr-2 inline animate-spin" size={20} /> Loading...
                     </td>
                   </tr>
                 ) : (
                   batches.map((b) => (
-                    <tr key={b.id} className="hover:bg-slate-800/50 transition-colors">
-                      <td className="px-6 py-4 text-white font-mono text-sm">#{b.id}</td>
-                      <td className="px-6 py-4 text-slate-300 text-sm">
+                    <tr key={b.id} className="transition-colors hover:bg-stone-50">
+                      <td className="px-6 py-4 font-mono text-sm text-stone-900">#{b.id}</td>
+                      <td className="px-6 py-4 text-sm text-stone-500">
                         {new Date(b.uploaded_at).toLocaleString()}
                       </td>
-                      <td className="px-6 py-4 text-slate-300">
+                      <td className="px-6 py-4 text-stone-600">
                         <div className="flex items-center gap-2">
-                          <FileText size={16} className="text-slate-500" />
+                          <FileText size={16} className="text-stone-400" />
                           {b.file_name}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-slate-300 font-mono">{b.valid_row_count}</td>
+                      <td className="px-6 py-4 font-mono text-stone-600">{b.valid_row_count}</td>
                       <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1 border ${getStatusBadgeClass(b.status)}`}>
+                        <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold ${getStatusBadgeClass(b.status)}`}>
                           {getStatusIcon(b.status)}
                           {b.status}
                         </span>
@@ -117,7 +117,7 @@ export default function HistoryScreen() {
                       <td className="px-6 py-4 text-right">
                         <button 
                           onClick={() => navigate(b.status === 'Completed' ? `/results/${b.id}` : `/progress/${b.id}`)}
-                          className="text-sm bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-4 py-2 rounded-lg transition-colors border border-indigo-500/20"
+                          className="rounded-lg border border-teal-200 bg-teal-50 px-4 py-2 text-sm text-teal-700 transition-colors hover:bg-teal-100"
                         >
                           {b.status === 'Completed' ? 'View Dashboard' : 'View Progress'}
                         </button>
@@ -127,7 +127,7 @@ export default function HistoryScreen() {
                 )}
                 {!loading && batches.length === 0 && (
                   <tr>
-                    <td colSpan="6" className="px-6 py-12 text-center text-slate-500">
+                    <td colSpan="6" className="px-6 py-12 text-center text-stone-400">
                       No run history found.
                     </td>
                   </tr>
@@ -137,7 +137,7 @@ export default function HistoryScreen() {
           </div>
           
           {total > limit && (
-            <div className="p-4 border-t border-slate-700 bg-slate-900/30 flex justify-between items-center text-sm text-slate-400">
+            <div className="flex items-center justify-between border-t border-stone-200 bg-stone-50 p-4 text-sm text-stone-500">
               <div>
                 Showing {skip + 1} to {Math.min(skip + limit, total)} of {total} runs
               </div>
@@ -145,14 +145,14 @@ export default function HistoryScreen() {
                 <button 
                   disabled={skip === 0} 
                   onClick={() => setSkip(skip - limit)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-colors"
+                  className="rounded-lg bg-white px-4 py-2 text-stone-700 transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Previous
                 </button>
                 <button 
                   disabled={skip + limit >= total} 
                   onClick={() => setSkip(skip + limit)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-colors"
+                  className="rounded-lg bg-white px-4 py-2 text-stone-700 transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Next
                 </button>

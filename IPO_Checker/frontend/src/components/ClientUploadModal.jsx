@@ -60,56 +60,56 @@ export default function ClientUploadModal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in-up">
-      <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-stone-900/40 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-2xl">
         {/* Header */}
-        <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
+        <div className="flex items-center justify-between border-b border-stone-200 bg-stone-50 p-6">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-violet-500/20 rounded-lg">
-              <Users className="text-violet-400" size={24} />
+            <div className="rounded-lg bg-violet-100 p-2">
+              <Users className="text-violet-700" size={24} />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">Upload Client List</h2>
-              <p className="text-slate-400 text-sm">Import clients from Excel (Name, PAN, Client Code)</p>
+              <h2 className="text-xl font-bold text-stone-900">Upload Client List</h2>
+              <p className="text-sm text-stone-500">Import clients from Excel (Name, PAN, Client Code)</p>
             </div>
           </div>
           <button 
             onClick={handleClose}
-            className="text-slate-400 hover:text-white p-2 rounded-full hover:bg-slate-800 transition-colors"
+            className="rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700"
           >
             <X size={20} />
           </button>
         </div>
         
         {/* Body */}
-        <div className="p-6 overflow-y-auto flex-grow space-y-6">
+        <div className="flex-grow space-y-6 overflow-y-auto p-6">
           {/* Format hint */}
-          <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
-            <h4 className="text-sm font-semibold text-slate-300 mb-2">Expected Excel Format</h4>
+          <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
+            <h4 className="mb-2 text-sm font-semibold text-stone-700">Expected Excel Format</h4>
             <div className="overflow-x-auto">
-              <table className="text-xs w-full">
+              <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-slate-700">
-                    <th className="text-left py-2 px-3 text-slate-400 font-medium">Name</th>
-                    <th className="text-left py-2 px-3 text-slate-400 font-medium">PAN</th>
-                    <th className="text-left py-2 px-3 text-slate-400 font-medium">Client Code</th>
+                  <tr className="border-b border-stone-200">
+                    <th className="px-3 py-2 text-left font-medium text-stone-400">Name</th>
+                    <th className="px-3 py-2 text-left font-medium text-stone-400">PAN</th>
+                    <th className="px-3 py-2 text-left font-medium text-stone-400">Client Code</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="text-slate-500">
-                    <td className="py-1.5 px-3">Rahul Sharma</td>
-                    <td className="py-1.5 px-3 font-mono">ABCDE1234F</td>
-                    <td className="py-1.5 px-3 font-mono">RC12345</td>
+                  <tr className="text-stone-500">
+                    <td className="px-3 py-1.5">Rahul Sharma</td>
+                    <td className="px-3 py-1.5 font-mono">ABCDE1234F</td>
+                    <td className="px-3 py-1.5 font-mono">RC12345</td>
                   </tr>
-                  <tr className="text-slate-500">
-                    <td className="py-1.5 px-3">Priya Patel</td>
-                    <td className="py-1.5 px-3 font-mono">XYZAB5678G</td>
-                    <td className="py-1.5 px-3 font-mono">PP98765</td>
+                  <tr className="text-stone-500">
+                    <td className="px-3 py-1.5">Priya Patel</td>
+                    <td className="px-3 py-1.5 font-mono">XYZAB5678G</td>
+                    <td className="px-3 py-1.5 font-mono">PP98765</td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <p className="text-[11px] text-slate-500 mt-2">At least one of PAN or Client Code is required per row. Existing clients will be updated.</p>
+            <p className="mt-2 text-[11px] text-stone-400">At least one of PAN or Client Code is required per row. Existing clients will be updated.</p>
           </div>
 
           {/* Dropzone */}
@@ -117,33 +117,33 @@ export default function ClientUploadModal({ isOpen, onClose }) {
             <div 
               {...getRootProps()} 
               className={clsx(
-                "border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-200 group flex flex-col items-center justify-center gap-3",
-                isDragActive ? "border-violet-500 bg-violet-500/10" : "border-slate-700 hover:border-slate-500 hover:bg-slate-800/50"
+                "group flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-10 text-center transition-all duration-200",
+                isDragActive ? "border-violet-400 bg-violet-50" : "border-stone-300 hover:border-stone-400 hover:bg-stone-50"
               )}
             >
               <input {...getInputProps()} />
-              <div className={clsx("p-3 rounded-full bg-slate-800 transition-colors group-hover:bg-slate-700", isDragActive && "bg-violet-500/20")}>
-                <UploadCloud size={32} className={clsx("transition-colors", isDragActive ? "text-violet-400" : "text-slate-400 group-hover:text-white")} />
+              <div className={clsx("rounded-full bg-stone-100 p-3 transition-colors group-hover:bg-stone-50", isDragActive && "bg-violet-100")}>
+                <UploadCloud size={32} className={clsx("transition-colors", isDragActive ? "text-violet-600" : "text-stone-400 group-hover:text-stone-600")} />
               </div>
               <div>
-                <p className="text-slate-300 font-medium mb-1">
+                <p className="mb-1 font-medium text-stone-800">
                   {isDragActive ? "Drop file here..." : "Drag & drop your client Excel file"}
                 </p>
-                <p className="text-slate-500 text-sm">or click to browse (max 10,000 rows)</p>
+                <p className="text-sm text-stone-400">or click to browse (max 10,000 rows)</p>
               </div>
             </div>
           ) : (
-            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5 flex items-center justify-between shadow-inner">
+            <div className="flex items-center justify-between rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
               <div className="flex items-center gap-4">
-                <div className="p-3 bg-violet-500/20 text-violet-400 rounded-lg">
+                <div className="rounded-lg bg-violet-100 p-3 text-violet-700">
                   <FileSpreadsheet size={24} />
                 </div>
                 <div>
-                  <h4 className="text-white font-medium">{file.name}</h4>
-                  <p className="text-slate-400 text-sm">{(file.size / 1024).toFixed(2)} KB</p>
+                  <h4 className="font-medium text-stone-900">{file.name}</h4>
+                  <p className="text-sm text-stone-400">{(file.size / 1024).toFixed(2)} KB</p>
                 </div>
               </div>
-              <button onClick={() => { setFile(null); setResult(null); setError(null); }} className="p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white transition-colors" title="Remove file">
+              <button onClick={() => { setFile(null); setResult(null); setError(null); }} className="rounded-full p-2 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700" title="Remove file">
                 <X size={18} />
               </button>
             </div>
@@ -154,7 +154,7 @@ export default function ClientUploadModal({ isOpen, onClose }) {
             <button 
               onClick={handleUpload}
               disabled={loading || !file}
-              className="w-full bg-violet-600 hover:bg-violet-500 text-white font-semibold py-3.5 px-6 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-violet-500/20"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-700 py-3.5 font-semibold text-white shadow-sm transition-colors hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? <Loader2 className="animate-spin" size={20} /> : <UploadCloud size={20} />}
               {loading ? 'Importing Clients...' : 'Import Client List'}
@@ -163,10 +163,10 @@ export default function ClientUploadModal({ isOpen, onClose }) {
 
           {/* Error */}
           {error && (
-            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 flex items-start gap-3">
-              <AlertCircle className="shrink-0 mt-0.5" size={20} />
+            <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-700">
+              <AlertCircle className="mt-0.5 shrink-0" size={20} />
               <div>
-                <h4 className="font-bold text-red-300 mb-1">Import Failed</h4>
+                <h4 className="mb-1 font-bold text-rose-800">Import Failed</h4>
                 <p className="text-sm">{error}</p>
               </div>
             </div>
@@ -175,33 +175,33 @@ export default function ClientUploadModal({ isOpen, onClose }) {
           {/* Success Result */}
           {result && (
             <div className="animate-fade-in-up space-y-4">
-              <div className="p-5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-start gap-3">
-                <CheckCircle2 className="shrink-0 mt-0.5 text-emerald-400" size={22} />
+              <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-5">
+                <CheckCircle2 className="mt-0.5 shrink-0 text-emerald-600" size={22} />
                 <div>
-                  <h4 className="font-bold text-emerald-300 mb-1">Import Successful</h4>
-                  <p className="text-emerald-400/80 text-sm">{result.message}</p>
+                  <h4 className="mb-1 font-bold text-emerald-800">Import Successful</h4>
+                  <p className="text-sm text-emerald-700/80">{result.message}</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
-                <div className="bg-emerald-500/10 p-4 rounded-xl border border-emerald-500/20 text-center">
-                  <p className="text-emerald-400 text-2xl font-bold">{result.created}</p>
-                  <p className="text-emerald-400/60 text-xs mt-1">Created</p>
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
+                  <p className="text-2xl font-bold text-emerald-700">{result.created}</p>
+                  <p className="mt-1 text-xs text-emerald-700/60">Created</p>
                 </div>
-                <div className="bg-indigo-500/10 p-4 rounded-xl border border-indigo-500/20 text-center">
-                  <p className="text-indigo-400 text-2xl font-bold">{result.updated}</p>
-                  <p className="text-indigo-400/60 text-xs mt-1">Updated</p>
+                <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-center">
+                  <p className="text-2xl font-bold text-violet-700">{result.updated}</p>
+                  <p className="mt-1 text-xs text-violet-700/60">Updated</p>
                 </div>
-                <div className="bg-slate-500/10 p-4 rounded-xl border border-slate-600 text-center">
-                  <p className="text-slate-300 text-2xl font-bold">{result.skipped}</p>
-                  <p className="text-slate-400/60 text-xs mt-1">Skipped</p>
+                <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-center">
+                  <p className="text-2xl font-bold text-stone-600">{result.skipped}</p>
+                  <p className="mt-1 text-xs text-stone-500">Skipped</p>
                 </div>
               </div>
 
               {result.errors && result.errors.length > 0 && (
-                <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
-                  <h4 className="text-amber-300 font-semibold text-sm mb-2">Warnings ({result.errors.length})</h4>
-                  <ul className="text-amber-400/70 text-xs space-y-1">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <h4 className="mb-2 text-sm font-semibold text-amber-800">Warnings ({result.errors.length})</h4>
+                  <ul className="space-y-1 text-xs text-amber-700/70">
                     {result.errors.map((err, i) => (
                       <li key={i}>• {err}</li>
                     ))}
@@ -213,10 +213,10 @@ export default function ClientUploadModal({ isOpen, onClose }) {
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-slate-800 bg-slate-900/50 text-right">
+        <div className="border-t border-stone-200 bg-stone-50 p-6 text-right">
           <button 
             onClick={handleClose}
-            className="bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2.5 px-6 rounded-xl transition-colors"
+            className="btn-secondary"
           >
             {result ? 'Done' : 'Cancel'}
           </button>
