@@ -70,9 +70,23 @@ def _normalize_name_for_match(value: str) -> str:
 
 
 def _normalize_name_loose(value: str) -> str:
-    """Name key that ignores legal-suffix differences (Ltd/Pvt/Limited)."""
+    """Name key that ignores legal-suffix differences (Ltd/Pvt/Limited),
+    parenthetical qualifiers, hyphen/en-dash spacing and trailing "SME" tags.
+
+    This keeps variants reported by different sources — "Fly-Hi Maritime
+    Travels" vs "FLY HI MARITIME TRAVELS", or "Tempsens Instruments" vs
+    "Tempsens Instruments (India) Limited", or "Phychem Technologies" vs
+    "Phychem Technologies Limited - SME" — on one row instead of creating
+    duplicate (and therefore held-for-review) rows.
+    """
     value = re.sub(r"\s*&\s*", " and ", value or "")
+    # Parenthetical qualifiers ("(India)", "(NSE)", ...) carry no matching signal.
+    value = re.sub(r"\([^)]*\)", " ", value or "")
+    # Hyphens/en-dashes are often just spacing: "Fly-Hi" == "Fly Hi".
+    value = re.sub(r"[-\u2013\u2014]", " ", value or "")
     value = re.sub(r"\b(limited|ltd|private|pvt)\b\.?", "", value or "", flags=re.I)
+    # Trailing SME marker is an exchange/aggregator tag, not part of the name.
+    value = re.sub(r"\bsme\b\.?", "", value or "", flags=re.I)
     return re.sub(r"\s+", " ", value).strip().lower()
 
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { User, FileSpreadsheet, ArrowRight, Users, Landmark } from 'lucide-react';
+import { User, FileSpreadsheet, ArrowRight, Users, Landmark, Settings } from 'lucide-react';
 import ClientUploadModal from '../components/ClientUploadModal';
 import IpoUploadModal from '../components/IpoUploadModal';
 
@@ -64,6 +64,11 @@ export default function ModeSelection() {
             <Users size={20} className="mr-2 text-indigo-600" />
             Upload Client List
           </button>
+
+          <Link to="/manage-ipos" className="inline-flex items-center rounded-xl border border-teal-200 bg-white px-6 py-3 text-teal-700 transition-colors hover:bg-teal-50">
+            <Settings size={20} className="mr-2 text-teal-700" />
+            Manage IPOs
+          </Link>
 
           <Link to="/history" className="inline-flex items-center rounded-xl border border-stone-200 bg-white px-6 py-3 text-stone-600 transition-colors hover:bg-stone-50">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>

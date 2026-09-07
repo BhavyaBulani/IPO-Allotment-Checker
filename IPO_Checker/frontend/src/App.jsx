@@ -5,6 +5,7 @@ import BulkUpload from './pages/BulkUpload';
 import ProgressScreen from './pages/ProgressScreen';
 import ResultsDashboard from './pages/ResultsDashboard';
 import HistoryScreen from './pages/HistoryScreen';
+import ManageIpos from './pages/ManageIpos';
 import Login from './pages/Login';
 import CaptchaPrompt from './components/CaptchaPrompt';
 import AppHeader from './components/AppHeader';
@@ -30,6 +31,7 @@ function App() {
         <Route path="/progress/:batchId" element={<Protected><ProgressScreen /></Protected>} />
         <Route path="/results/:batchId" element={<Protected><ResultsDashboard /></Protected>} />
         <Route path="/history" element={<Protected><HistoryScreen /></Protected>} />
+        <Route path="/manage-ipos" element={<Protected><ManageIpos /></Protected>} />
       </Routes>
     </BrowserRouter>
   );

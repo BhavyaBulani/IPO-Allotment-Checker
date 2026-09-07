@@ -44,7 +44,10 @@ class ReconciledIPO:
 
 def _normalize_name_for_match(value: str) -> str:
     value = re.sub(r"\s*&\s*", " and ", value or "")
+    value = re.sub(r"\([^)]*\)", " ", value or "")
+    value = re.sub(r"[-\u2013\u2014]", " ", value or "")
     value = re.sub(r"\b(limited|ltd|private|pvt)\b\.?", "", value or "", flags=re.I)
+    value = re.sub(r"\bsme\b\.?", "", value or "", flags=re.I)
     value = re.sub(r"\s+", " ", value).strip().lower()
     return value
 

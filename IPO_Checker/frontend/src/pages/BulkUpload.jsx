@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, UploadCloud, FileSpreadsheet, X, Loader2, AlertCircle } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
-import api from '../lib/api';
+import api, { apiErrorMessage } from '../lib/api';
 import clsx from 'clsx';
 
 export default function BulkUpload() {
@@ -42,7 +42,7 @@ export default function BulkUpload() {
       });
       navigate(`/progress/${res.data.batch_id}`);
     } catch (err) {
-      setError(err.response?.data?.detail || "Failed to process upload. Please check the file format.");
+      setError(apiErrorMessage(err, 'Failed to process upload. Please check the file format.'));
       setLoading(false);
     }
   };

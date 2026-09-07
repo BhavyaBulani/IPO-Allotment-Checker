@@ -78,6 +78,39 @@ def get_validated_ipos(
     ]
 
 
+@router.get("/admin", dependencies=[Depends(require_auth)])
+def list_all_ipos_admin(
+    db: Session = Depends(get_db),
+    validated: Optional[bool] = Query(None, description="Filter by validated (published) state."),
+):
+    """Admin listing of every IPO row, including held-for-review ones.
+
+    Unlike ``GET /api/ipos/`` (which only returns validated rows for the
+    client-facing dropdown), this returns the full catalogue so an admin can
+    see and manage rows that are held for review (registrar not mapped, or a
+    registrar with no live integration yet) and delete stale/duplicate rows.
+    """
+    query = db.query(IPO, Registrar.name).outerjoin(Registrar, IPO.registrar_id == Registrar.id)
+    if validated is not None:
+        query = query.filter(IPO.validated == validated)
+    rows = query.order_by(IPO.id).all()
+
+    return [
+        {
+            "id": ipo.id,
+            "name": ipo.name,
+            "status": ipo.status.value,
+            "validated": ipo.validated,
+            "registrar_id": ipo.registrar_id,
+            "registrar_name": registrar_name,
+            "source": ipo.source,
+            "close_date": ipo.close_date,
+            "synced_at": ipo.synced_at,
+        }
+        for ipo, registrar_name in rows
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Manual IPO upload (CSV / Excel)
 # ---------------------------------------------------------------------------

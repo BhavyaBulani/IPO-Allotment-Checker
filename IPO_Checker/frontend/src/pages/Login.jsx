@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, Loader2 } from 'lucide-react';
-import api from '../lib/api';
+import api, { apiErrorMessage } from '../lib/api';
 import { setToken } from '../lib/auth';
 
 export default function Login() {
@@ -21,7 +21,7 @@ export default function Login() {
       setToken(res.data.token);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Login failed. Please try again.');
+      setError(apiErrorMessage(err, 'Login failed. Please try again.'));
     } finally {
       setLoading(false);
     }

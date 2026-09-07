@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npm --prefix IPO_Checker/frontend ci",
+  "buildCommand": "npm --prefix IPO_Checker/frontend run build",
+  "outputDirectory": "IPO_Checker/frontend/dist",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

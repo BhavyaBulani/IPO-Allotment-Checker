@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Search, Loader2, AlertCircle } from 'lucide-react';
 import IpoSelect from '../components/IpoSelect';
-import api from '../lib/api';
+import api, { apiErrorMessage } from '../lib/api';
 
 export default function SingleClientEntry() {
   const [identifier, setIdentifier] = useState('');
@@ -46,7 +46,7 @@ export default function SingleClientEntry() {
       });
       setResult(res.data);
     } catch (err) {
-      setError(err.response?.data?.detail || 'An unexpected error occurred');
+      setError(apiErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -68,7 +68,7 @@ export default function SingleClientEntry() {
       setIpos((prev) => prev.filter((item) => String(item.id) !== String(id)));
       if (String(selectedIpoId) === String(id)) setSelectedIpoId('');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to delete IPO.');
+      setError(apiErrorMessage(err, 'Failed to delete IPO.'));
     } finally {
       setDeletingId(null);
     }
