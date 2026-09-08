@@ -19,10 +19,10 @@ no-record identifiers alike. We therefore validate the PAN format ourselves
 before submitting, so the site's message is only treated as "no allotment
 record" for a well-formed PAN.
 
-The found-record ("allotted") page shape has NOT been observed from a live
-allottee, so this parser deliberately does not guess at it: any response
-other than the fixed no-record message degrades to ``Website_Error``. MAS can
-therefore never fabricate an "Allotted" verdict off an unverified shape.
+The found-record page echoes the applicant's details plus a
+"Shares Allotted" cell whose value is either ``NIL`` (zero) or a number.
+``NIL``/``0`` means not allotted; a positive number means allotted. Any other
+shape degrades to ``Website_Error`` so a site change never fabricates a verdict.
 
 Selectors validated against the live DOM on 26-08-2026.
 """
@@ -30,7 +30,7 @@ Selectors validated against the live DOM on 26-08-2026.
 import re
 
 from db.models import ResultStatus
-from .base_live import BaseLiveRegistrar, labels_token_match
+from .base_live import BaseLiveRegistrar, labels_token_match, normalize_pan
 from ..base import RegistrarResult
 
 PAN_RE = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
@@ -111,9 +111,62 @@ class MasLiveRegistrar(BaseLiveRegistrar):
                 "Record not found in MAS Services' allotment database (no allotment).",
             )
 
-        # The found-record (allotted) page shape is not yet verified; never
-        # guess at it. Any other shape is a site change we cannot interpret.
+        # Found-record page: verify the echoed PAN, then read the
+        # "Shares Allotted" cell (NIL/0 -> not allotted, number -> allotted).
+        queried_pan = normalize_pan(pan)
+        if queried_pan:
+            page_text = _collapse_ws(_strip_tags(text)).upper()
+            if queried_pan not in page_text:
+                return RegistrarResult(
+                    ResultStatus.Website_Error,
+                    "MAS returned a record that does not echo the queried PAN; "
+                    "not treated as a verdict.",
+                )
+
+        allotted = _parse_mas_allotted(text)
+        if allotted is None:
+            return RegistrarResult(
+                ResultStatus.Website_Error,
+                "Unrecognized MAS response; could not determine allotment.",
+            )
+        if allotted > 0:
+            return RegistrarResult(
+                ResultStatus.Allotted, f"Allotted {allotted} shares (MAS)."
+            )
         return RegistrarResult(
-            ResultStatus.Website_Error,
-            "Unrecognized MAS response; could not determine allotment.",
+            ResultStatus.Not_Allotted, "Allotted shares is zero (MAS)."
         )
+
+
+_TAG_RE = re.compile(r"<[^>]+>")
+_ALLOTTED_RE = re.compile(
+    r"SHARES\s+ALLOTTED\s*[:=]?\s*(NIL\.?|[\d,]+)", re.IGNORECASE
+)
+
+
+def _strip_tags(html: str) -> str:
+    return _TAG_RE.sub(" ", html or "")
+
+
+def _collapse_ws(text: str) -> str:
+    return re.sub(r"\s+", " ", text or "").strip()
+
+
+def _parse_int(value: str) -> int | None:
+    text = (value or "").replace(",", "").strip()
+    if not text:
+        return None
+    if text.upper() in ("NIL", "NIL."):
+        return 0
+    try:
+        return int(text)
+    except ValueError:
+        return None
+
+
+def _parse_mas_allotted(html: str) -> int | None:
+    text = _collapse_ws(_strip_tags(html)).upper()
+    match = _ALLOTTED_RE.search(text)
+    if not match:
+        return None
+    return _parse_int(match.group(1))

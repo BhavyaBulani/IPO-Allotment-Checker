@@ -10,10 +10,10 @@ For a no-match identifier the page re-renders with an explicit message:
 
     No record found. Please re-check your Application Number or PAN Number.
 
-The found-record ("allotted") page shape has NOT been observed from a live
-allottee, so this parser deliberately does not guess at it: any response other
-than the fixed no-record message degrades to ``Website_Error``. Purva can
-therefore never fabricate an "Allotted" verdict off an unverified shape.
+The found-record page renders a ``results-table`` with one data row whose
+columns include ``Pan No`` and ``Shares Allotted``. ``0``/``NIL`` means not
+allotted; a positive number means allotted. Any other shape degrades to
+``Website_Error`` so a site change never fabricates a verdict.
 
 Selectors validated against the live DOM on 26-08-2026.
 """
@@ -21,7 +21,7 @@ Selectors validated against the live DOM on 26-08-2026.
 import re
 
 from db.models import ResultStatus
-from .base_live import BaseLiveRegistrar, labels_token_match
+from .base_live import BaseLiveRegistrar, labels_token_match, normalize_pan
 from ..base import RegistrarResult
 
 PAN_RE = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
@@ -107,9 +107,104 @@ class PurvaLiveRegistrar(BaseLiveRegistrar):
                 "Record not found in Purva Sharegistry's allotment database (no allotment).",
             )
 
-        # The found-record (allotted) page shape is not yet verified; never
-        # guess at it. Any other shape is a site change we cannot interpret.
+        record = _parse_purva_record(text)
+        if record is None:
+            return RegistrarResult(
+                ResultStatus.Website_Error,
+                "Unrecognized Purva response; could not determine allotment.",
+            )
+
+        queried_pan = normalize_pan(pan)
+        returned_pan = normalize_pan(record.get("pan"))
+        if returned_pan and queried_pan and returned_pan != queried_pan:
+            return RegistrarResult(
+                ResultStatus.Website_Error,
+                "Purva returned a record for a different PAN; not treated as a verdict.",
+            )
+
+        allotted = _parse_int(record.get("allotted"))
+        if allotted is None:
+            return RegistrarResult(
+                ResultStatus.Website_Error,
+                "Could not interpret Purva allotted share count.",
+            )
+        if allotted > 0:
+            return RegistrarResult(
+                ResultStatus.Allotted, f"Allotted {allotted} shares (Purva)."
+            )
         return RegistrarResult(
-            ResultStatus.Website_Error,
-            "Unrecognized Purva response; could not determine allotment.",
+            ResultStatus.Not_Allotted, "Allotted shares is zero (Purva)."
         )
+
+
+_TAG_RE = re.compile(r"<[^>]+>")
+_RESULTS_TABLE_RE = re.compile(
+    r"<table[^>]*results-table[^>]*>(.*?)</table>", re.IGNORECASE | re.DOTALL
+)
+_THEAD_RE = re.compile(r"<thead[^>]*>(.*?)</thead>", re.IGNORECASE | re.DOTALL)
+_TBODY_RE = re.compile(r"<tbody[^>]*>(.*?)</tbody>", re.IGNORECASE | re.DOTALL)
+_TH_RE = re.compile(r"<th[^>]*>(.*?)</th>", re.IGNORECASE | re.DOTALL)
+_TR_RE = re.compile(r"<tr[^>]*>(.*?)</tr>", re.IGNORECASE | re.DOTALL)
+_TD_RE = re.compile(r"<td[^>]*>(.*?)</td>", re.IGNORECASE | re.DOTALL)
+
+
+def _strip_tags(html: str) -> str:
+    return _TAG_RE.sub(" ", html or "")
+
+
+def _collapse_ws(text: str) -> str:
+    return re.sub(r"\s+", " ", text or "").strip()
+
+
+def _normalize_header(text: str) -> str:
+    return re.sub(r"[^A-Z0-9]", "", (text or "").upper())
+
+
+def _parse_int(value: str) -> int | None:
+    text = (value or "").replace(",", "").strip()
+    if not text:
+        return None
+    if text.upper() in ("NIL", "NIL."):
+        return 0
+    try:
+        return int(text)
+    except ValueError:
+        return None
+
+
+def _parse_purva_record(html: str) -> dict | None:
+    table = _RESULTS_TABLE_RE.search(html)
+    if not table:
+        return None
+    table_html = table.group(1)
+
+    thead = _THEAD_RE.search(table_html)
+    if not thead:
+        return None
+    headers = [_collapse_ws(_strip_tags(h)) for h in _TH_RE.findall(thead.group(1))]
+    norm_headers = [_normalize_header(h) for h in headers]
+
+    try:
+        allotted_idx = norm_headers.index("SHARESALLOTTED")
+    except ValueError:
+        return None
+
+    pan_idx = None
+    for idx, header in enumerate(norm_headers):
+        if header in ("PAN", "PANNO", "PANNUMBER"):
+            pan_idx = idx
+            break
+    if pan_idx is None:
+        return None
+
+    tbody = _TBODY_RE.search(table_html)
+    if not tbody:
+        return None
+    row = _TR_RE.search(tbody.group(1))
+    if not row:
+        return None
+    cells = [_collapse_ws(_strip_tags(td)) for td in _TD_RE.findall(row.group(1))]
+
+    if allotted_idx >= len(cells) or pan_idx >= len(cells):
+        return None
+    return {"allotted": cells[allotted_idx], "pan": cells[pan_idx]}

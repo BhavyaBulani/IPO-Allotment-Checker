@@ -248,6 +248,31 @@ class MasParserTests(unittest.TestCase):
         )
         self.assertEqual(result.status, ResultStatus.Website_Error)
 
+    def test_found_record_nil_is_not_allotted(self):
+        html = (
+            "<table><tr><td><b>Shares Applied</b></td><td><b>4000</b></td>"
+            "<td><b>Shares Allotted</b></td><td><b>NIL</b></td></tr>"
+            "<tr><td><b>PAN</b></td><td><b>ABCDE1234F</b></td></tr></table>"
+        )
+        result = self.parser.parse_result_text(html, PAN, None, "Test IPO")
+        self.assertEqual(result.status, ResultStatus.Not_Allotted)
+
+    def test_found_record_positive_is_allotted(self):
+        html = (
+            "<table><tr><td><b>Shares Allotted</b></td><td><b>1606</b></td></tr>"
+            "<tr><td><b>PAN</b></td><td><b>ABCDE1234F</b></td></tr></table>"
+        )
+        result = self.parser.parse_result_text(html, PAN, None, "Test IPO")
+        self.assertEqual(result.status, ResultStatus.Allotted)
+
+    def test_found_record_wrong_pan_is_not_a_verdict(self):
+        html = (
+            "<table><tr><td><b>Shares Allotted</b></td><td><b>50</b></td></tr>"
+            "<tr><td><b>PAN</b></td><td><b>XXXXX0000X</b></td></tr></table>"
+        )
+        result = self.parser.parse_result_text(html, PAN, None, "Test IPO")
+        self.assertEqual(result.status, ResultStatus.Website_Error)
+
 
 class PurvaParserTests(unittest.TestCase):
     def setUp(self):
@@ -264,6 +289,48 @@ class PurvaParserTests(unittest.TestCase):
         result = self.parser.parse_result_text(
             "<html>Allotment details table</html>", PAN, None, "Test IPO"
         )
+        self.assertEqual(result.status, ResultStatus.Website_Error)
+
+    def test_found_record_zero_is_not_allotted(self):
+        html = (
+            '<table class="results-table"><thead><tr>'
+            '<th>Name</th><th>Application Number</th><th>Pan No</th>'
+            '<th>DPID - Client Id</th><th>Shares Applied</th>'
+            '<th>Shares Allotted</th><th>Refund Amount</th>'
+            '</tr></thead><tbody><tr>'
+            '<td>X</td><td>123</td><td>ABCDE1234F</td>'
+            '<td>IN303575-10401255</td><td>2400</td><td>0</td><td>283200.00</td>'
+            '</tr></tbody></table>'
+        )
+        result = self.parser.parse_result_text(html, PAN, None, "Test IPO")
+        self.assertEqual(result.status, ResultStatus.Not_Allotted)
+
+    def test_found_record_positive_is_allotted(self):
+        html = (
+            '<table class="results-table"><thead><tr>'
+            '<th>Name</th><th>Application Number</th><th>Pan No</th>'
+            '<th>DPID - Client Id</th><th>Shares Applied</th>'
+            '<th>Shares Allotted</th><th>Refund Amount</th>'
+            '</tr></thead><tbody><tr>'
+            '<td>X</td><td>123</td><td>ABCDE1234F</td>'
+            '<td>IN303575-10401255</td><td>2400</td><td>1606</td><td>0</td>'
+            '</tr></tbody></table>'
+        )
+        result = self.parser.parse_result_text(html, PAN, None, "Test IPO")
+        self.assertEqual(result.status, ResultStatus.Allotted)
+
+    def test_found_record_wrong_pan_is_not_a_verdict(self):
+        html = (
+            '<table class="results-table"><thead><tr>'
+            '<th>Name</th><th>Application Number</th><th>Pan No</th>'
+            '<th>DPID - Client Id</th><th>Shares Applied</th>'
+            '<th>Shares Allotted</th><th>Refund Amount</th>'
+            '</tr></thead><tbody><tr>'
+            '<td>X</td><td>123</td><td>XXXXX0000X</td>'
+            '<td>IN303575-10401255</td><td>2400</td><td>50</td><td>0</td>'
+            '</tr></tbody></table>'
+        )
+        result = self.parser.parse_result_text(html, PAN, None, "Test IPO")
         self.assertEqual(result.status, ResultStatus.Website_Error)
 
 
