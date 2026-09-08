@@ -40,7 +40,9 @@ export default function BulkUpload() {
       const res = await api.post('/check/bulk', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      navigate(`/progress/${res.data.batch_id}`);
+      navigate(`/progress/${res.data.batch_id}`, {
+        state: { skippedBigshare: res.data.skipped_bigshare_ipos || [] },
+      });
     } catch (err) {
       setError(apiErrorMessage(err, 'Failed to process upload. Please check the file format.'));
       setLoading(false);

@@ -134,3 +134,32 @@ class RunLog(Base):
     registrars_used = Column(String(255), nullable=True)
 
     batch = relationship("UploadBatch", back_populates="run_logs")
+
+
+class BigshareFlow(Base):
+    """A single in-flight Bigshare CAPTCHA check (user-assisted flow).
+
+    Bigshare's portal is stateless over HTTP (no session cookie), so the
+    CAPTCHA token is the only state that binds a CAPTCHA image to its submit.
+    We persist that token (plus the PAN and matched company value we need to
+    submit) in MySQL instead of process memory so the two steps of one check
+    can land on different uvicorn workers or survive a redeploy. Rows are
+    short-lived: deleted on use and pruned after FLOW_TTL_SECONDS.
+
+    PAN and captcha_token are sensitive; they are never logged and are held
+    only for the ~10-minute lifetime of the flow.
+    """
+    __tablename__ = "bigshare_flows"
+
+    id = Column(String(36), primary_key=True)
+    ipo_name = Column(String(200), nullable=False)
+    company_value = Column(String(200), nullable=False)
+    selection_type = Column(String(20), nullable=False)
+    pan = Column(String(10), nullable=False)
+    captcha_token = Column(String(500), nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    last_activity = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        Index('idx_bigshare_flows_last_activity', 'last_activity'),
+    )

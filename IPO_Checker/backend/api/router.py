@@ -11,6 +11,7 @@ from api.endpoints import (
     captcha,
     clients,
     auth,
+    bigshare,
 )
 from api.security import require_auth
 
@@ -44,4 +45,7 @@ api_router.include_router(
 )
 api_router.include_router(
     clients.router, prefix="/clients", tags=["clients"], dependencies=[Depends(require_auth)]
+)
+api_router.include_router(
+    bigshare.router, prefix="/bigshare", tags=["bigshare"], dependencies=[Depends(require_auth)]
 )

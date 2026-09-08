@@ -76,7 +76,9 @@ def _clean_issue_name(name: str) -> str:
     return _IPO_SUFFIX_RE.sub("", (name or "").strip()).strip()
 
 # Link Intime and MUFG Intime are the same company/portal (MUFG is the
-# renamed Link Intime), so the one portal serves both registrar IDs.
+# renamed Link Intime), so the one portal serves both registrar IDs. The
+# portal is branded MUFG Intime today, so discovered rows are labelled
+# MUFG Intime even though the portal also serves legacy Link Intime issues.
 LINK_MUFG_PORTAL = [1, 4]
 
 # One adapter per live portal. ``kind`` selects the reader:
@@ -91,7 +93,7 @@ _ADAPTERS = [
         "kind": "kfin_combobox",
     },
     {
-        "registrar_name": "Link Intime",
+        "registrar_name": "MUFG Intime",
         "registrar_ids": list(LINK_MUFG_PORTAL),
         "portal_url": _link.LinkIntimeLiveRegistrar.portal_url,
         "kind": "select",

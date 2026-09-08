@@ -56,6 +56,21 @@ def _db_keepalive_enabled() -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _ensure_bigshare_flow_table() -> None:
+    """Create ``bigshare_flows`` if it does not already exist.
+
+    The schema is normally applied by ``alembic upgrade head`` in the Render
+    start command, but some services are deployed with a bare ``uvicorn`` start
+    command that never runs migrations. Creating this single table idempotently
+    at startup keeps the user-assisted Bigshare CAPTCHA flow working either way
+    (``checkfirst=True`` leaves an Alembic-created table untouched).
+    """
+    from db.models import BigshareFlow
+    from db.session import engine
+
+    BigshareFlow.__table__.create(bind=engine, checkfirst=True)
+
+
 async def _periodic_ipo_sync():
     """Background task that syncs IPOs every IPO_SYNC_INTERVAL_SECONDS."""
     while True:
@@ -132,6 +147,11 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown events for the application."""
     # --- Startup ---
     logger.info("Application starting up. Running IPO auto-sync...")
+    try:
+        _ensure_bigshare_flow_table()
+        logger.info("Bigshare CAPTCHA flow table is ready.")
+    except Exception as e:
+        logger.warning(f"Could not ensure Bigshare CAPTCHA flow table: {e}")
     try:
         from ipo_sync.auto_detect import sync_ipos
         # Run the sync in a worker thread so its HTTP calls never block the

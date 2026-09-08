@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Search, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Search, Loader2, AlertCircle, RefreshCw, ShieldCheck } from 'lucide-react';
 import IpoSelect from '../components/IpoSelect';
 import api, { apiErrorMessage } from '../lib/api';
+
+// Registrar id for Bigshare Services (see scripts/seed_registrars.py).
+const BIGSHARE_REGISTRAR_ID = 3;
 
 export default function SingleClientEntry() {
   const [identifier, setIdentifier] = useState('');
@@ -14,6 +17,13 @@ export default function SingleClientEntry() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+
+  // User-assisted Bigshare CAPTCHA state.
+  const [captcha, setCaptcha] = useState(null); // { flow_id, image, ipo }
+  const [captchaAnswer, setCaptchaAnswer] = useState('');
+  const [captchaRefreshing, setCaptchaRefreshing] = useState(false);
+  const [captchaSubmitting, setCaptchaSubmitting] = useState(false);
+  const [captchaError, setCaptchaError] = useState(null);
 
   useEffect(() => {
     const fetchCheckableIpos = async () => {
@@ -31,6 +41,20 @@ export default function SingleClientEntry() {
     fetchCheckableIpos();
   }, []);
 
+  const selectedIpo = ipos.find((ipo) => String(ipo.id) === String(selectedIpoId));
+  const isBigshare =
+    selectedIpo &&
+    (selectedIpo.registrar_id === BIGSHARE_REGISTRAR_ID ||
+      selectedIpo.registrar_name === 'Bigshare Services');
+
+  const resetCheck = () => {
+    setResult(null);
+    setError(null);
+    setCaptcha(null);
+    setCaptchaAnswer('');
+    setCaptchaError(null);
+  };
+
   const handleCheck = async (e) => {
     e.preventDefault();
     if (!identifier || !selectedIpoId) return;
@@ -38,13 +62,25 @@ export default function SingleClientEntry() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setCaptcha(null);
+    setCaptchaAnswer('');
+    setCaptchaError(null);
 
     try {
-      const res = await api.post('/check/single', {
-        identifier,
-        ipo_ids: [Number(selectedIpoId)],
-      });
-      setResult(res.data);
+      if (isBigshare) {
+        // Step 1: ask the backend to open a Bigshare session and fetch its CAPTCHA.
+        const res = await api.post('/bigshare/captcha', {
+          identifier,
+          ipo_id: Number(selectedIpoId),
+        });
+        setCaptcha({ flow_id: res.data.flow_id, image: res.data.image, ipo: res.data.ipo });
+      } else {
+        const res = await api.post('/check/single', {
+          identifier,
+          ipo_ids: [Number(selectedIpoId)],
+        });
+        setResult(res.data);
+      }
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
@@ -52,7 +88,63 @@ export default function SingleClientEntry() {
     }
   };
 
-  const selectedIpo = ipos.find((ipo) => String(ipo.id) === String(selectedIpoId));
+  const handleCaptchaRefresh = async () => {
+    if (!captcha) return;
+    setCaptchaRefreshing(true);
+    setCaptchaError(null);
+    setCaptchaAnswer('');
+    try {
+      const res = await api.post('/bigshare/captcha/refresh', { flow_id: captcha.flow_id });
+      setCaptcha((prev) => ({ ...prev, image: res.data.image }));
+    } catch (err) {
+      if (err.response?.status === 410) {
+        // Flow expired server-side; restart from scratch.
+        setCaptcha(null);
+        setError('CAPTCHA session expired. Please start the check again.');
+      } else {
+        setCaptchaError(apiErrorMessage(err, 'Failed to refresh the CAPTCHA.'));
+      }
+    } finally {
+      setCaptchaRefreshing(false);
+    }
+  };
+
+  const handleCaptchaSubmit = async (e) => {
+    e.preventDefault();
+    if (!captcha || !captchaAnswer.trim()) return;
+
+    setCaptchaSubmitting(true);
+    setCaptchaError(null);
+    try {
+      const res = await api.post('/bigshare/check', {
+        flow_id: captcha.flow_id,
+        captcha_answer: captchaAnswer.trim(),
+      });
+
+      if (res.data.captcha_rejected) {
+        // Server rejected the answer and returned a fresh image; stay on the
+        // CAPTCHA step and let the user retype.
+        setCaptcha((prev) => ({ ...prev, image: res.data.image }));
+        setCaptchaAnswer('');
+        setCaptchaError(res.data.message || 'Invalid CAPTCHA, please try again.');
+        return;
+      }
+
+      // Success (or a definitive verdict) — show it and clear the CAPTCHA step.
+      setResult(res.data);
+      setCaptcha(null);
+      setCaptchaAnswer('');
+    } catch (err) {
+      if (err.response?.status === 410) {
+        setCaptcha(null);
+        setError('CAPTCHA session expired. Please start the check again.');
+      } else {
+        setCaptchaError(apiErrorMessage(err, 'Failed to submit the CAPTCHA.'));
+      }
+    } finally {
+      setCaptchaSubmitting(false);
+    }
+  };
 
   const handleDeleteIpo = async (ipo) => {
     const id = ipo.id;
@@ -66,7 +158,10 @@ export default function SingleClientEntry() {
     try {
       await api.delete(`/ipos/${id}`);
       setIpos((prev) => prev.filter((item) => String(item.id) !== String(id)));
-      if (String(selectedIpoId) === String(id)) setSelectedIpoId('');
+      if (String(selectedIpoId) === String(id)) {
+        setSelectedIpoId('');
+        resetCheck();
+      }
     } catch (err) {
       setError(apiErrorMessage(err, 'Failed to delete IPO.'));
     } finally {
@@ -132,7 +227,7 @@ export default function SingleClientEntry() {
 
             <button
               type="submit"
-              disabled={loading || identifier.length < 5 || !selectedIpoId}
+              disabled={loading || identifier.length < 5 || !selectedIpoId || !!captcha}
               className="btn-primary mt-4 w-full"
             >
               {loading ? <Loader2 className="animate-spin" size={20} /> : <Search size={20} />}
@@ -140,14 +235,85 @@ export default function SingleClientEntry() {
             </button>
           </form>
 
+          {/* User-assisted Bigshare CAPTCHA step */}
+          {captcha && (
+            <div className="relative z-10 mt-8 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="rounded-lg bg-teal-100 p-2 text-teal-700">
+                  <ShieldCheck size={22} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-stone-900">Bigshare CAPTCHA verification</h3>
+                  <p className="text-sm text-stone-500">
+                    Type the characters shown below to check the status for {captcha.ipo}.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mb-4 flex items-center gap-4">
+                <div className="flex min-h-[60px] items-center justify-center rounded-lg border border-stone-200 bg-stone-50 px-2">
+                  <img
+                    src={captcha.image}
+                    alt="Bigshare CAPTCHA"
+                    className="max-w-full"
+                    style={{ imageRendering: 'pixelated' }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCaptchaRefresh}
+                  disabled={captchaRefreshing}
+                  className="flex items-center gap-2 rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-600 transition hover:bg-stone-100 disabled:opacity-50"
+                  title="Load a new CAPTCHA"
+                >
+                  <RefreshCw size={16} className={captchaRefreshing ? 'animate-spin' : ''} />
+                  Refresh
+                </button>
+              </div>
+
+              <form onSubmit={handleCaptchaSubmit} className="flex flex-col gap-3 sm:flex-row">
+                <input
+                  type="text"
+                  value={captchaAnswer}
+                  onChange={(e) => setCaptchaAnswer(e.target.value.toUpperCase())}
+                  placeholder="Enter CAPTCHA text"
+                  className="input flex-1 font-mono uppercase"
+                  autoComplete="off"
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  disabled={!captchaAnswer.trim() || captchaSubmitting}
+                  className="btn-primary"
+                >
+                  {captchaSubmitting ? <Loader2 className="animate-spin" size={20} /> : 'Verify & Check'}
+                </button>
+              </form>
+
+              {captchaError && (
+                <div className="mt-4 flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-700">
+                  <span className="font-semibold">CAPTCHA:</span> {captchaError}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={resetCheck}
+                className="mt-4 text-sm text-stone-400 underline-offset-2 hover:underline"
+              >
+                Cancel and start over
+              </button>
+            </div>
+          )}
+
           {error && (
-            <div className="mt-6 flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-700">
+            <div className="relative z-10 mt-6 flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-700">
               <span className="font-semibold">Error:</span> {error}
             </div>
           )}
 
           {result && (
-            <div className="animate-fade-in-up mt-8 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+            <div className="animate-fade-in-up relative z-10 mt-8 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
               <h3 className="mb-4 text-xl font-bold text-stone-900">Verification Result</h3>
               <div className="space-y-3 text-stone-600">
                 <div className="flex justify-between border-b border-stone-100 pb-3">

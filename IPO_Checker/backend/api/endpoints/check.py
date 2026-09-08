@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from api.deps import require_auth
 from db.models import IPO, IPOStatus, Registrar
 from db.session import get_db
+from registrar_services.bigshare_http import BIGSHARE_REGISTRAR_ID
 from schemas.input import PanCheckRequest, SingleCheckRequest, IdentifierCheckRequest
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,14 @@ def _run_check(orchestrator, db, pan, client_code, ipo, registrar_ids):
             "ipo": ipo.name,
             "status": "Website Error",
             "message": "No active registrar is mapped for this IPO; check was not run.",
+        }
+    if registrar_id == BIGSHARE_REGISTRAR_ID:
+        # Bigshare's CAPTCHA must be typed by a human. Never auto-solve it here
+        # (OCR/2Captcha); the single-check flow handles Bigshare interactively.
+        return {
+            "ipo": ipo.name,
+            "status": "Website Error",
+            "message": "Bigshare requires manual CAPTCHA verification; use Single Client Check for this IPO.",
         }
     try:
         res = orchestrator.check_allotment(
@@ -260,6 +269,18 @@ async def check_bulk_upload(
         if not ipos:
             raise HTTPException(status_code=400, detail=_NO_CHECKABLE_IPOS_MSG)
 
+    # Bigshare's CAPTCHA must be typed by a human, which cannot happen inside a
+    # background bulk run. Skip Bigshare IPOs and direct the user to the Single
+    # Client Check for those — never auto-solve them with OCR/2Captcha.
+    bigshare_ipos = [ipo for ipo in ipos if ipo.registrar_id == BIGSHARE_REGISTRAR_ID]
+    eligible_ipos = [ipo for ipo in ipos if ipo.registrar_id != BIGSHARE_REGISTRAR_ID]
+    if not eligible_ipos:
+        raise HTTPException(
+            status_code=400,
+            detail="All selected IPOs are handled by Bigshare, which requires a "
+                   "manually-typed CAPTCHA. Use Single Client Check for Bigshare IPOs.",
+        )
+
     content = await file.read()
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=400, detail="File is too large. Maximum size is 10 MB.")
@@ -334,7 +355,7 @@ async def check_bulk_upload(
     db.flush()  # flush to get batch.id
 
     # Create BatchIPOs
-    for ipo in ipos:
+    for ipo in eligible_ipos:
         batch_ipo = BatchIPO(batch_id=batch.id, ipo_id=ipo.id)
         db.add(batch_ipo)
 
@@ -441,7 +462,7 @@ async def check_bulk_upload(
         client = client_map.get(("pan", pan)) if pan else client_map.get(("code", code))
         if not client or not client.id:
             continue
-        for ipo in ipos:
+        for ipo in eligible_ipos:
             registrar_id = resolve_registrar_id(ipo, registrar_ids)
             jobs.append({
                 "batch_id": batch.id,
@@ -458,7 +479,8 @@ async def check_bulk_upload(
         "status": "success",
         "message": f"File uploaded. Found {len(df)} total rows. ({valid_rows} valid, {invalid_rows} invalid).",
         "batch_id": batch.id,
-        "selected_ipos": [ipo.name for ipo in ipos]
+        "selected_ipos": [ipo.name for ipo in eligible_ipos],
+        "skipped_bigshare_ipos": [ipo.name for ipo in bigshare_ipos],
     }
 
 

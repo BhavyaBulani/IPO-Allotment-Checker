@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { ArrowLeft, Loader2, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import api from '../lib/api';
 
 export default function ProgressScreen() {
   const { batchId } = useParams();
+  const location = useLocation();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
@@ -62,6 +63,20 @@ export default function ProgressScreen() {
         <Link to="/" className="back-link mb-8">
           <ArrowLeft size={20} className="mr-2" /> Back to Home
         </Link>
+
+        {location.state?.skippedBigshare?.length > 0 && (
+          <div className="mb-6 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-800">
+            <AlertCircle size={20} className="mt-0.5 shrink-0" />
+            <div>
+              <p className="font-semibold">Some IPOs were skipped</p>
+              <p className="text-sm">
+                Bigshare IPOs require a manually-typed CAPTCHA and cannot be checked in
+                bulk. Use Single Client Check for:{' '}
+                {location.state.skippedBigshare.join(', ')}.
+              </p>
+            </div>
+          </div>
+        )}
         
         <div className="glass-panel relative overflow-hidden rounded-3xl p-8 md:p-10">
           <div className="pointer-events-none absolute top-0 right-0 h-64 w-64 translate-x-1/2 -translate-y-1/2 rounded-full bg-teal-200/40 blur-3xl" />

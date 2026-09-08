@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from db.session import SessionLocal
 from db.models import UploadBatch, BatchIPO, Client, AllotmentResult, BatchStatus, ResultStatus, IPO
+from registrar_services.bigshare_http import BIGSHARE_REGISTRAR_ID
 from registrar_services.orchestrator import orchestrator
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,31 @@ async def process_client_check(batch_id: int, client_id: int, ipo_id: int, ipo_n
                 db.add(allotment)
                 db.commit()
                 return
-            
+
+            # Bigshare's CAPTCHA must be typed by a human, which a background
+            # bulk worker cannot do. Never auto-solve it with OCR/2Captcha. The
+            # bulk endpoint filters Bigshare jobs out up front, so this is a
+            # defensive guard only (e.g. a stale/ hand-built job list).
+            if registrar_id == BIGSHARE_REGISTRAR_ID:
+                logger.warning(
+                    "Skipping Bigshare bulk job for client %s, IPO %s (manual CAPTCHA required).",
+                    client_id, ipo_id,
+                )
+                allotment = AllotmentResult(
+                    client_id=client_id,
+                    ipo_id=ipo_id,
+                    batch_id=batch_id,
+                    registrar_id=registrar_id,
+                    status=ResultStatus.Website_Error,
+                    checked_at=datetime.utcnow(),
+                    served_from_cache=False,
+                    cache_expires_at=None,
+                    captcha_path="bigshare-manual",
+                )
+                db.add(allotment)
+                db.commit()
+                return
+
             # Fetch the full Client record to get both identifiers
             client = db.query(Client).filter(Client.id == client_id).first()
             client_pan = client.pan if client else None

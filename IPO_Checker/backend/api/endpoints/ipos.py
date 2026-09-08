@@ -27,6 +27,8 @@ class IpoResponse(BaseModel):
     open_date: Optional[datetime]
     close_date: Optional[datetime]
     source: Optional[str]
+    registrar_id: Optional[int]
+    registrar_name: Optional[str]
 
     class Config:
         from_attributes = True
@@ -45,11 +47,15 @@ def get_validated_ipos(
     returned, so the dashboard dropdown never offers an IPO whose verdict is
     still pending (a registrar has no record yet for those).
     """
-    query = db.query(IPO).filter(IPO.validated == True)
+    query = db.query(IPO, Registrar.name).outerjoin(
+        Registrar, IPO.registrar_id == Registrar.id
+    ).filter(IPO.validated == True)
     if checkable:
         from api.endpoints.check import _CHECKABLE_STATUSES
         query = query.filter(IPO.status.in_(_CHECKABLE_STATUSES))
-    ipos = query.all()
+    rows = query.all()
+    ipos = [ipo for ipo, _registrar_name in rows]
+    registrar_names = {ipo.id: _registrar_name for ipo, _registrar_name in rows}
     
     def sort_key(ipo):
         priority = 4
@@ -73,7 +79,9 @@ def get_validated_ipos(
             "auto_detected": ipo.auto_detected,
             "open_date": ipo.open_date,
             "close_date": ipo.close_date,
-            "source": ipo.source
+            "source": ipo.source,
+            "registrar_id": ipo.registrar_id,
+            "registrar_name": registrar_names.get(ipo.id),
         } for ipo in sorted_ipos
     ]
 
