@@ -15,11 +15,17 @@ server-verified and cannot be skipped.
 Response ``d`` shape:
 
     {"Status": "NOTFOUND"}                        -> no allotment
-    {"Status": "OK", "ALLOTED": N, "APPLIED": M}  -> record found
-    {"Status": "CAPTCHA"|"RATELIMIT"|"WARMING"}   -> transient / retryable
+    {"Status": "OK", "ALLOTED": "NON-ALLOTTE" | N,
+     "APPLIED": M, "Records": [{...}, ...]}        -> record(s) found
+    {"Status": "CAPTCHA"|"RATELIMIT"|"WARMING"}    -> transient / retryable
 
-``ALLOTED > 0`` means allotted. Every unexpected shape degrades to
-``Website_Error`` so a stale selector or API change never fabricates a verdict.
+``ALLOTED`` is either a positive share count (allotted) or the literal
+``NON-ALLOTTE`` marker (not allotted). When ``MatchCount > 1`` the PAN has
+several applications and ``Records`` carries one row per application, so we
+read the maximum share count across them. The image CAPTCHA is solved offline
+with ddddocr (no 2Captcha key required); the shared manager's auto/manual
+solvers act as fallback. Every unexpected shape degrades to ``Website_Error``
+so a stale selector or API change never fabricates a verdict.
 
 Selectors validated against the live DOM on 22-08-2026.
 """
@@ -38,6 +44,7 @@ SELECTORS = {
     "captcha_img": "#captcha",
     "captcha_input": "#captcha-input",
     "search_btn": "#btn_Search",
+    "refresh_captcha": "#refresh-captcha",
 }
 
 # SelectionType option value that makes the form search by PAN.
@@ -59,6 +66,7 @@ class BigshareLiveRegistrar(BaseLiveRegistrar):
         return 3
 
     portal_url = "https://ipo.bigshareonline.com/"
+    max_captcha_attempts = 3
 
     def submit_query(self, page, pan, client_code, ipo_name) -> str:
         pan_value = (pan or "").strip().upper()
@@ -83,24 +91,43 @@ class BigshareLiveRegistrar(BaseLiveRegistrar):
         page.wait_for_selector(SELECTORS["pan_input"], state="visible")
         page.fill(SELECTORS["pan_input"], pan_value)
 
-        # 3) Solve the server-verified CAPTCHA through the shared manager.
-        captcha_bytes = self._get_captcha_bytes(page)
+        # 3) Solve the server-verified CAPTCHA. The offline ddddocr solver
+        #    handles Bigshare's six-character image CAPTCHA directly; the
+        #    shared manager falls back to 2Captcha / manual solving only when
+        #    the local model is unavailable. If the server rejects the answer
+        #    (status CAPTCHA), refresh the image and retry.
         from ..captcha_manager import captcha_manager
-        solution = captcha_manager.request_solve(
-            captcha_bytes, {"registrar": self.name, "ipo": ipo_name}
-        )
-        if not solution:
-            raise RuntimeError("Bigshare CAPTCHA was not solved.")
-        page.fill(SELECTORS["captcha_input"], solution)
 
-        # 4) Submit and capture the web-method response. The page's own JS
-        #    supplies the CaptchaToken (kept in a closure) and performs the
-        #    POST, so we only have to observe it.
-        with page.expect_response(
-            lambda r: API_MARKER in r.url, timeout=self.action_timeout_ms
-        ) as resp_info:
-            page.click(SELECTORS["search_btn"])
-        return resp_info.value.text()
+        last_text = ""
+        for attempt in range(self.max_captcha_attempts):
+            captcha_bytes = self._get_captcha_bytes(page)
+            solution = captcha_manager.request_solve(
+                captcha_bytes, {"registrar": self.name, "ipo": ipo_name}
+            )
+            if not solution:
+                raise RuntimeError("Bigshare CAPTCHA was not solved.")
+            page.fill(SELECTORS["captcha_input"], solution)
+
+            # 4) Submit and capture the web-method response. The page's own JS
+            #    supplies the CaptchaToken (kept in a closure) and performs the
+            #    POST, so we only have to observe it.
+            with page.expect_response(
+                lambda r: API_MARKER in r.url, timeout=self.action_timeout_ms
+            ) as resp_info:
+                page.click(SELECTORS["search_btn"])
+            text = resp_info.value.text()
+            last_text = text
+
+            if (
+                _response_status(text) == CAPTCHA
+                and attempt < self.max_captcha_attempts - 1
+            ):
+                page.click(SELECTORS["refresh_captcha"])
+                page.wait_for_timeout(400)
+                continue
+            return text
+
+        return last_text
 
     def _find_company_value(self, page, ipo_name):
         wanted = (ipo_name or "").strip().upper()
@@ -205,40 +232,94 @@ class BigshareLiveRegistrar(BaseLiveRegistrar):
                 "Bigshare returned a record for a different PAN; not treated as a verdict.",
             )
 
-        if "ALLOTED" in comp:
-            shares = _parse_shares(comp.get("ALLOTED"))
-            if shares is None:
-                return RegistrarResult(
-                    ResultStatus.Website_Error,
-                    "Could not interpret Bigshare allotted share count.",
-                )
-            if shares > 0:
-                return RegistrarResult(
-                    ResultStatus.Allotted, f"Allotted {shares} shares (Bigshare)."
-                )
+        verdict = _allotment_verdict(comp)
+        if verdict is None:
             return RegistrarResult(
-                ResultStatus.Not_Allotted, "Allotted shares is zero (Bigshare)."
+                ResultStatus.Website_Error,
+                "Could not interpret Bigshare allotted share count.",
             )
-
+        allotted, shares = verdict
+        if allotted:
+            return RegistrarResult(
+                ResultStatus.Allotted, f"Allotted {shares} shares (Bigshare)."
+            )
         return RegistrarResult(
-            ResultStatus.Website_Error,
-            "Could not determine allotment from Bigshare response.",
+            ResultStatus.Not_Allotted, "Allotted shares is zero (Bigshare)."
         )
 
 
-def _parse_shares(value):
-    if value is None:
-        return None
-    if isinstance(value, bool):
+def _response_status(text):
+    """Return Bigshare's response Status, or "" when not parseable."""
+    if not text:
+        return ""
+    try:
+        data = json.loads(text)
+    except (TypeError, ValueError):
+        return ""
+    comp = data.get("d") if isinstance(data, dict) else None
+    if not isinstance(comp, dict):
+        return ""
+    return str(comp.get("Status") or "").strip().upper()
+
+
+_NON_ALLOTTED_MARKERS = {
+    "NON-ALLOTTE", "NON-ALLOTTED", "NON ALLOTTED", "NOT ALLOTTED",
+    "NOT-ALLOTTED", "NOTALLOTTED", "NO ALLOTMENT", "NO-ALLOTMENT",
+    "NIL", "NIL.", "ZERO", "0",
+}
+
+
+def _interpret_allotted(value):
+    """Interpret Bigshare's ALLOTED field.
+
+    Returns ``(allotted: bool | None, shares: int | None)``. ``None`` means the
+    value was unrecognised and must not be turned into a verdict.
+    """
+    if value is None or isinstance(value, bool):
         # A boolean is never a share count; treating True as 1 share would
         # fabricate an "Allotted" verdict from an unexpected shape.
-        return None
+        return (None, None)
+
     if isinstance(value, (int, float)):
-        return int(value)
+        shares = int(value)
+        return (shares > 0, shares)
+
     text = str(value).replace(",", "").strip()
     if not text:
-        return None
+        return (None, None)
+
+    upper = text.upper()
+    if upper in _NON_ALLOTTED_MARKERS:
+        return (False, 0)
+
     try:
-        return int(text)
+        shares = int(text)
+        return (shares > 0, shares)
     except ValueError:
+        return (None, None)
+
+
+def _allotment_verdict(comp):
+    """Aggregate Bigshare allotment across all application rows.
+
+    Returns ``(allotted: bool, shares: int)`` or ``None`` for an unrecognised
+    shape. ``Records`` (present when ``MatchCount > 1``) carries one row per
+    application; we fall back to the top-level object for a single match.
+    """
+    rows = comp.get("Records")
+    if not (isinstance(rows, list) and rows):
+        rows = [comp]
+    rows = [r for r in rows if isinstance(r, dict)]
+    if not rows:
         return None
+
+    any_allotted = False
+    max_shares = 0
+    for row in rows:
+        allotted, shares = _interpret_allotted(row.get("ALLOTED"))
+        if allotted is None:
+            return None
+        if allotted:
+            any_allotted = True
+            max_shares = max(max_shares, shares)
+    return (any_allotted, max_shares)

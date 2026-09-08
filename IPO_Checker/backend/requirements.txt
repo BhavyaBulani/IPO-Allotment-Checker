@@ -6,6 +6,7 @@ PyMySQL
 pandas
 openpyxl
 playwright
+ddddocr
 python-dotenv
 requests
 beautifulsoup4

@@ -19,6 +19,14 @@ class CaptchaManager:
         }
 
     def request_solve(self, image_bytes: bytes, context: dict = None) -> Optional[str]:
+        # Offline OCR first: it needs no API key and no human, and handles
+        # Bigshare's image CAPTCHA directly. Only fall back to a paid/ manual
+        # solver when the local model is unavailable or fails.
+        from .offline_ocr_provider import OfflineOcrProvider
+        solution = OfflineOcrProvider().solve(image_bytes, context)
+        if solution:
+            return solution
+
         if self.use_auto_solver:
             from .auto_solver_provider import AutoSolverProvider
             provider = AutoSolverProvider()
