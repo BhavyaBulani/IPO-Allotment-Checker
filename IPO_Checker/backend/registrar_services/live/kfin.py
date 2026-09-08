@@ -10,10 +10,12 @@ The form has no CAPTCHA: it asks for an IPO (autocomplete), a search type
 Responses:
 
     404 -> {"error": "Record Not Found"}   (no allotment for this PAN + IPO)
-    200 -> {"Name", "DP_CLID", "Pan_No", "App_Shares", "All_Shares", ...}
+    200 -> {"data": [{"Name", "DP_CLID", "Pan_No", "App_Shares", "All_Shares", ...}]}
 
-``All_Shares > 0`` means allotted. Every unexpected shape degrades to
-``Website_Error`` so a stale selector or API change never fabricates a verdict.
+The success envelope was previously a flat object; it is now wrapped in a
+``data`` list, so ``parse_result_text`` accepts both. ``All_Shares > 0`` means
+allotted. Every unexpected shape degrades to ``Website_Error`` so a stale
+selector or API change never fabricates a verdict.
 """
 
 import json
@@ -131,32 +133,81 @@ class KFinLiveRegistrar(BaseLiveRegistrar):
                 f"KFin query error: {err_msg}",
             )
 
-        if "All_Shares" in data:
-            queried_pan = normalize_pan(pan)
-            returned_pan = normalize_pan(data.get("Pan_No"))
-            if returned_pan and queried_pan and returned_pan != queried_pan:
-                return RegistrarResult(
-                    ResultStatus.Website_Error,
-                    "KFin returned a record for a different PAN; not treated as a verdict.",
-                )
-            shares = _parse_shares(data.get("All_Shares"))
-            if shares is None:
-                return RegistrarResult(
-                    ResultStatus.Website_Error,
-                    "Could not interpret KFin allotted share count.",
-                )
-            if shares > 0:
-                return RegistrarResult(
-                    ResultStatus.Allotted, f"Allotted {shares} shares (KFin)."
-                )
+        records = _extract_records(data)
+        if records is None:
             return RegistrarResult(
-                ResultStatus.Not_Allotted, "Allotted shares is zero (KFin)."
+                ResultStatus.Website_Error,
+                "Could not determine allotment from KFin response.",
             )
 
+        queried_pan = normalize_pan(pan)
+        record = _choose_record(records, queried_pan)
+        if record is None:
+            return RegistrarResult(
+                ResultStatus.Website_Error,
+                "KFin returned multiple records but none matched the queried PAN; "
+                "not treated as a verdict.",
+            )
+
+        returned_pan = normalize_pan(record.get("Pan_No"))
+        if returned_pan and queried_pan and returned_pan != queried_pan:
+            return RegistrarResult(
+                ResultStatus.Website_Error,
+                "KFin returned a record for a different PAN; not treated as a verdict.",
+            )
+
+        shares = _parse_shares(record.get("All_Shares"))
+        if shares is None:
+            return RegistrarResult(
+                ResultStatus.Website_Error,
+                "Could not interpret KFin allotted share count.",
+            )
+        if shares > 0:
+            return RegistrarResult(
+                ResultStatus.Allotted, f"Allotted {shares} shares (KFin)."
+            )
         return RegistrarResult(
-            ResultStatus.Website_Error,
-            "Could not determine allotment from KFin response.",
+            ResultStatus.Not_Allotted, "Allotted shares is zero (KFin)."
         )
+
+
+def _extract_records(data):
+    """Return KFin allotment records as a list, or None for an unknown shape.
+
+    KFin's query API now wraps the result in a ``data`` envelope (a list of
+    record objects); older responses were a flat object. Accept both so a
+    response-shape change can never silently fabricate a verdict.
+    """
+    if not isinstance(data, dict):
+        return None
+
+    if "data" in data:
+        inner = data["data"]
+        if isinstance(inner, list):
+            return [r for r in inner if isinstance(r, dict)]
+        if isinstance(inner, dict):
+            return [inner]
+        return []
+
+    if "All_Shares" in data:
+        return [data]
+
+    return None
+
+
+def _choose_record(records, queried_pan):
+    """Pick the record for the queried PAN, tolerating only an unambiguous match."""
+    if not records:
+        return None
+    if queried_pan:
+        matches = [r for r in records if normalize_pan(r.get("Pan_No")) == queried_pan]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            return None
+    if len(records) == 1:
+        return records[0]
+    return None
 
 
 def _parse_shares(value):

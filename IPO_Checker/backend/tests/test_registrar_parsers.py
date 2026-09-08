@@ -76,6 +76,49 @@ class KFinParserTests(unittest.TestCase):
         )
         self.assertEqual(result.status, ResultStatus.Not_Allotted)
 
+    def test_data_envelope_zero_shares_is_not_allotted(self):
+        result = self.parser.parse_result_text(
+            '{"data":[{"Name":"X","Pan_No":"ABCDE1234F","All_Shares":"0",'
+            '"App_Shares":"7169"}]}',
+            PAN, None, "Test IPO",
+        )
+        self.assertEqual(result.status, ResultStatus.Not_Allotted)
+
+    def test_data_envelope_positive_shares_is_allotted(self):
+        result = self.parser.parse_result_text(
+            '{"data":[{"Name":"X","Pan_No":"ABCDE1234F","All_Shares":"50"}]}',
+            PAN, None, "Test IPO",
+        )
+        self.assertEqual(result.status, ResultStatus.Allotted)
+
+    def test_data_envelope_single_dict_is_allotted(self):
+        result = self.parser.parse_result_text(
+            '{"data":{"Name":"X","Pan_No":"ABCDE1234F","All_Shares":"1"}}',
+            PAN, None, "Test IPO",
+        )
+        self.assertEqual(result.status, ResultStatus.Allotted)
+
+    def test_data_envelope_mismatched_pan_is_not_a_verdict(self):
+        result = self.parser.parse_result_text(
+            '{"data":[{"Name":"X","Pan_No":"XXXXX0000X","All_Shares":"50"}]}',
+            PAN, None, "Test IPO",
+        )
+        self.assertEqual(result.status, ResultStatus.Website_Error)
+
+    def test_data_envelope_empty_is_not_a_verdict(self):
+        result = self.parser.parse_result_text(
+            '{"data":[]}', PAN, None, "Test IPO"
+        )
+        self.assertEqual(result.status, ResultStatus.Website_Error)
+
+    def test_data_envelope_multiple_ambiguous_is_not_a_verdict(self):
+        result = self.parser.parse_result_text(
+            '{"data":[{"Pan_No":"AAAAA0000A","All_Shares":"0"},'
+            '{"Pan_No":"BBBBB0000B","All_Shares":"0"}]}',
+            PAN, None, "Test IPO",
+        )
+        self.assertEqual(result.status, ResultStatus.Website_Error)
+
     def test_different_pan_is_not_a_verdict(self):
         result = self.parser.parse_result_text(
             '{"Name":"X","Pan_No":"XXXXX0000X","All_Shares":"50"}',
