@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from api.security import (
@@ -7,6 +7,7 @@ from api.security import (
     client_ip,
     create_access_token,
     record_login_failure,
+    require_auth,
 )
 
 router = APIRouter()
@@ -28,3 +29,14 @@ def login(request: LoginRequest, http_request: Request):
         raise HTTPException(status_code=401, detail="Invalid password.")
 
     return {"token": create_access_token(), "token_type": "bearer"}
+
+
+@router.get("/verify")
+def verify_token(_: str = Depends(require_auth)):
+    """Cheap bearer-token validation for the SPA boot gate.
+
+    The frontend calls this on startup so it can hold a splash screen while the
+    stored token is verified, instead of flashing the dashboard and then being
+    bounced to /login when the first protected request returns 401.
+    """
+    return {"authenticated": True}

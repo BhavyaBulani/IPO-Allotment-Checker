@@ -36,7 +36,9 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // skipAuthRedirect lets the boot-time token check handle its own 401
+    // (behind the splash screen) instead of triggering a full page reload.
+    if (error.response?.status === 401 && !error.config?.skipAuthRedirect) {
       clearToken();
       if (window.location.pathname !== '/login') {
         window.location.assign('/login');

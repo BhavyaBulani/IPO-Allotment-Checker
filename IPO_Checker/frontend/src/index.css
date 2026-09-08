@@ -107,3 +107,63 @@
     opacity: 1;
   }
 }
+
+/* Splash screen — stock-broking "trading terminal" loading state */
+@keyframes ticker-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes candle-rise {
+  0%,
+  100% {
+    transform: scaleY(0.55);
+  }
+  50% {
+    transform: scaleY(1.05);
+  }
+}
+
+@keyframes candle-fall {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(0.5);
+  }
+}
+
+@keyframes splash-dot {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+.splash-ticker {
+  animation: ticker-scroll 24s linear infinite;
+}
+
+.splash-candle-up {
+  animation: candle-rise 1.9s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+.splash-candle-down {
+  animation: candle-fall 2.2s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+.splash-dot {
+  animation: splash-dot 1.4s ease-in-out infinite;
+}

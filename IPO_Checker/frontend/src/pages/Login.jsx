@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Lock, Loader2 } from 'lucide-react';
 import api, { apiErrorMessage } from '../lib/api';
 import { setToken } from '../lib/auth';
 
 export default function Login() {
-  const navigate = useNavigate();
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -19,7 +17,9 @@ export default function Login() {
     try {
       const res = await api.post('/auth/login', { password });
       setToken(res.data.token);
-      navigate('/');
+      // Full reload so the app's boot gate re-runs and verifies the fresh
+      // token behind the splash screen before showing the dashboard.
+      window.location.assign('/');
     } catch (err) {
       setError(apiErrorMessage(err, 'Login failed. Please try again.'));
     } finally {
