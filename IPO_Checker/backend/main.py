@@ -8,8 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.router import api_router
+from observability import RequestContextMiddleware, configure_logging
 
-logging.basicConfig(level=logging.INFO)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 # Playwright downloads browsers to ~/.cache/ms-playwright by default, but
@@ -232,6 +233,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Outermost middleware: attaches a request id + structured access log to every
+# request, including CORS preflights. Added last so it wraps everything else.
+app.add_middleware(RequestContextMiddleware)
+
 app.include_router(api_router, prefix="/api")
 
 @app.get("/health")
@@ -266,3 +271,17 @@ def health_db_check():
             content={"status": "error", "detail": "database unreachable"},
         )
     return {"status": "ok", "database": "ok"}
+
+
+@app.get("/health/scrapers")
+def health_scrapers_check():
+    """Expose the rolling Website_Error signal for external alerting.
+
+    Registrar portals change without notice; a run of Website_Error results is
+    the safe symptom of a broken selector/API (parsers never fabricate a
+    verdict). An external monitor can alert on ``error_count >= threshold``
+    independently of the in-process webhook alert.
+    """
+    from registrar_services.website_error_monitor import website_error_monitor
+
+    return website_error_monitor.snapshot()

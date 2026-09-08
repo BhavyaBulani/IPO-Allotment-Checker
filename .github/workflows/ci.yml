@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend-test:
+    name: Backend tests
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: ipo_test
+          MYSQL_USER: ipo_user
+          MYSQL_PASSWORD: ipo_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root --password=root --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
+    defaults:
+      run:
+        working-directory: IPO_Checker/backend
+
+    env:
+      # DB-backed API tests run against the MySQL service above; the auth and
+      # parser tests need no database and run regardless of this variable.
+      TEST_DATABASE_URL: mysql+pymysql://ipo_user:ipo_password@127.0.0.1:3306/ipo_test
+      APP_ENV: development
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: IPO_Checker/backend/requirements-dev.txt
+
+      - name: Install Python dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run backend tests
+        run: python -m pytest tests/ -v
+
+  frontend-lint:
+    name: Frontend lint
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: IPO_Checker/frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: IPO_Checker/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run oxlint
+        run: npm run lint

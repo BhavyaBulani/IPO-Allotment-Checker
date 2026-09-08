@@ -10,6 +10,7 @@ from .live.mas import MasLiveRegistrar
 from .live.alankit import AlankitLiveRegistrar
 from .live.purva import PurvaLiveRegistrar
 from .rate_limiter import rate_limiter
+from .website_error_monitor import website_error_monitor
 
 APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
 
@@ -62,6 +63,12 @@ class FallbackOrchestrator:
         if result.status in [ResultStatus.Timeout, ResultStatus.Server_Busy]:
             rate_limiter.wait(primary_registrar_id)
             result = primary.check(pan, client_code, ipo_name)
+
+        # A Website_Error from the live check (not the early config guards
+        # above) means a portal shape changed or the site failed. Count it for
+        # the spike alert; it is the only safe "something broke" signal.
+        if result.status == ResultStatus.Website_Error:
+            website_error_monitor.record(primary_registrar_id)
 
         return result
 

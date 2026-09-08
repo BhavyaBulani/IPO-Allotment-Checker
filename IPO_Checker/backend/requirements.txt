@@ -3,6 +3,7 @@ uvicorn[standard]
 SQLAlchemy
 alembic
 PyMySQL
+cryptography
 pandas
 openpyxl
 playwright
