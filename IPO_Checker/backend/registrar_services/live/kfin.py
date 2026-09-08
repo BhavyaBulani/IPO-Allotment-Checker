@@ -19,7 +19,7 @@ Responses:
 import json
 
 from db.models import ResultStatus
-from .base_live import BaseLiveRegistrar, normalize_pan
+from .base_live import BaseLiveRegistrar, labels_token_match, normalize_pan
 from ..base import RegistrarResult
 
 # Validated against the live DOM on 22-08-2026.
@@ -79,13 +79,18 @@ class KFinLiveRegistrar(BaseLiveRegistrar):
         if not wanted:
             return None
         options = page.query_selector_all(SELECTORS["ipo_option"])
-        for opt in options:
-            if (opt.inner_text() or "").strip().upper() == wanted:
+        labeled = [
+            (opt, (opt.inner_text() or "").strip().upper())
+            for opt in options
+        ]
+        for opt, label in labeled:
+            if label == wanted:
                 return opt
-        for opt in options:
-            label = (opt.inner_text() or "").strip().upper()
-            if wanted in label or label in wanted:
-                return opt
+        # Fail loud unless exactly one option matches on tokens: a wrong issue
+        # here would produce a confident-looking but wrong verdict.
+        matches = [opt for opt, label in labeled if labels_token_match(wanted, label)]
+        if len(matches) == 1:
+            return matches[0]
         return None
 
     def parse_result_text(self, text, pan, client_code, ipo_name) -> RegistrarResult:
@@ -112,9 +117,14 @@ class KFinLiveRegistrar(BaseLiveRegistrar):
                     "Record not found in KFin's allotment database (no allotment).",
                 )
             if err_msg.lower() == "unknown error":
+                # "unknown error" is the portal's not-yet-published signal, not
+                # proof of no allotment. Reporting it as Not_Allotted would be a
+                # false negative the worker then caches for 24h. Fail loud
+                # instead: Website_Error is never cached.
                 return RegistrarResult(
-                    ResultStatus.Not_Allotted,
-                    "Record not found (KFin returned 'unknown error' - allotment data may not be available yet).",
+                    ResultStatus.Website_Error,
+                    "KFin returned 'unknown error' — allotment data may not be "
+                    "available yet; check not treated as a verdict.",
                 )
             return RegistrarResult(
                 ResultStatus.Website_Error,

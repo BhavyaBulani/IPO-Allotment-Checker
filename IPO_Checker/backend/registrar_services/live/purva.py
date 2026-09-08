@@ -21,7 +21,7 @@ Selectors validated against the live DOM on 26-08-2026.
 import re
 
 from db.models import ResultStatus
-from .base_live import BaseLiveRegistrar
+from .base_live import BaseLiveRegistrar, labels_token_match
 from ..base import RegistrarResult
 
 PAN_RE = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
@@ -92,9 +92,9 @@ class PurvaLiveRegistrar(BaseLiveRegistrar):
         for value, text in candidates:
             if text == wanted:
                 return value
-        for value, text in candidates:
-            if wanted in text or text in wanted:
-                return value
+        matches = [value for value, text in candidates if labels_token_match(wanted, text)]
+        if len(matches) == 1:
+            return matches[0]
         return None
 
     def parse_result_text(self, text, pan, client_code, ipo_name) -> RegistrarResult:

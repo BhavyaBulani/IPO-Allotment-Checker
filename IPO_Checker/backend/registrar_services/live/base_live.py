@@ -46,6 +46,38 @@ def find_pan_field(mapping) -> str | None:
     return None
 
 
+_STOP_TOKENS = {"LTD", "LIMITED", "PVT", "PRIVATE", "AND", "THE"}
+
+
+def significant_tokens(label: str) -> set[str]:
+    """Upper-case alphanumeric tokens, minus legal/entity filler words.
+
+    Tokens shorter than two characters are dropped so stray characters from
+    punctuation ("&", "/", initials) cannot drive a false match.
+    """
+    return {
+        token
+        for token in re.findall(r"[A-Z0-9]+", (label or "").upper())
+        if token not in _STOP_TOKENS and len(token) >= 2
+    }
+
+
+def labels_token_match(wanted: str, label: str) -> bool:
+    """Whether a dropdown ``label`` covers every significant token of ``wanted``.
+
+    The match is directional: every significant token of the queried name must
+    appear in the candidate label. This avoids the substring test
+    (``wanted in label``) that could match "NXT Digital" against "NXT Telecom",
+    and keeps an SME query from matching the mainboard issue that merely shares
+    the company name.
+    """
+    w_tokens = significant_tokens(wanted)
+    l_tokens = significant_tokens(label)
+    if not w_tokens or not l_tokens:
+        return False
+    return w_tokens.issubset(l_tokens)
+
+
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.environ.get(name)
     if raw is None:

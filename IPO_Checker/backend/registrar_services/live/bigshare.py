@@ -28,7 +28,7 @@ import base64
 import json
 
 from db.models import ResultStatus
-from .base_live import BaseLiveRegistrar, find_pan_field, normalize_pan
+from .base_live import BaseLiveRegistrar, find_pan_field, labels_token_match, normalize_pan
 from ..base import RegistrarResult
 
 SELECTORS = {
@@ -117,9 +117,9 @@ class BigshareLiveRegistrar(BaseLiveRegistrar):
         for value, text in candidates:
             if text == wanted:
                 return value
-        for value, text in candidates:
-            if wanted in text or text in wanted:
-                return value
+        matches = [value for value, text in candidates if labels_token_match(wanted, text)]
+        if len(matches) == 1:
+            return matches[0]
         return None
 
     def _get_captcha_bytes(self, page) -> bytes:

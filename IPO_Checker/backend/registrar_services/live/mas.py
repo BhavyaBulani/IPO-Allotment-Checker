@@ -30,7 +30,7 @@ Selectors validated against the live DOM on 26-08-2026.
 import re
 
 from db.models import ResultStatus
-from .base_live import BaseLiveRegistrar
+from .base_live import BaseLiveRegistrar, labels_token_match
 from ..base import RegistrarResult
 
 PAN_RE = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
@@ -97,7 +97,9 @@ class MasLiveRegistrar(BaseLiveRegistrar):
         current = (current_issue or "").strip().upper()
         if not wanted or not current:
             return False
-        return wanted == current or wanted in current or current in wanted
+        if wanted == current:
+            return True
+        return labels_token_match(wanted, current)
 
     def parse_result_text(self, text, pan, client_code, ipo_name) -> RegistrarResult:
         if not text or not text.strip():
