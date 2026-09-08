@@ -72,11 +72,11 @@ export default function SplashScreen({ status = 'Connecting to markets…' }) {
       {/* Center */}
       <div className="relative flex flex-1 flex-col items-center justify-center px-6">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-300/20 bg-white/95 shadow-[0_0_50px_-10px_rgba(16,185,129,0.55)]">
-          <img src="/mamatlialogo.png" alt="Mamatla" className="h-11 w-auto" draggable={false} />
+          <img src="/mamatlialogo.png" alt="Matalia" className="h-11 w-auto" draggable={false} />
         </div>
 
         <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.35em] text-emerald-300/80">
-          Mamatla
+          Matalia
         </p>
         <h1 className="font-display mt-2 text-center text-3xl font-bold tracking-tight text-white md:text-4xl">
           IPO Allotment Verification
@@ -115,7 +115,7 @@ export default function SplashScreen({ status = 'Connecting to markets…' }) {
 
       {/* Bottom strip */}
       <div className="relative border-t border-emerald-400/10 py-4 text-center text-[11px] tracking-[0.2em] text-emerald-100/30">
-        IPO ALLOTMENT CHECKER · MAMATLA BROKING DESK
+        IPO ALLOTMENT CHECKER · MATALIA BROKING DESK
       </div>
     </div>
   );
