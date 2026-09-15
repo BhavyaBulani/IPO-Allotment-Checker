@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from api.deps import require_auth
 from db.models import AllotmentResult, BatchIPO, IPO, IPOStatus, Registrar
 from db.session import get_db
+from ipo_sync.name_key import normalize_ipo_name
 from ipo_sync.registrar_map import resolve_registrar_name
 from ipo_sync.retire import RETIRE_AFTER_SCANS
 
@@ -156,10 +157,14 @@ def _normalize_header(value: str) -> str:
 
 
 def _normalize_name(value: str) -> str:
-    """Same suffix-insensitive key used by the auto-sync pipeline."""
-    value = re.sub(r"\s*&\s*", " and ", value or "")
-    value = re.sub(r"\b(limited|ltd|private|pvt)\b\.?", "", value or "", flags=re.I)
-    return re.sub(r"\s+", " ", value).strip().lower()
+    """The shared name key from ipo_sync.name_key.
+
+    This was previously a separate, weaker copy of the key: it folded only the
+    legal suffixes, so a spreadsheet row reading "Foo Limited - SME" keyed
+    differently here than in the auto-sync pipeline and created a second row for
+    a company that already existed.
+    """
+    return normalize_ipo_name(value)
 
 
 def _detect_column(df, keywords, exclude=()):
@@ -306,9 +311,13 @@ async def upload_ipo_list(
             detail="Could not find a 'Name' / 'Company' column. Please include an IPO name column.",
         )
 
-    existing_by_name = {
-        _normalize_name(ipo.name): ipo for ipo in db.query(IPO).all()
-    }
+    # Keyed on the stored name_key, falling back to computing it for a row
+    # written before the column existed.
+    existing_by_name: dict[str, IPO] = {}
+    for ipo in db.query(IPO).all():
+        key = ipo.name_key or _normalize_name(ipo.name)
+        if key:
+            existing_by_name.setdefault(key, ipo)
 
     created = 0
     updated = 0
@@ -367,6 +376,9 @@ async def upload_ipo_list(
             if existing.validated != final_validated:
                 existing.validated = final_validated
                 changed = True
+            if normalized and existing.name_key != normalized:
+                existing.name_key = normalized
+                changed = True
             existing.source = "manual-upload"
             if changed:
                 existing.synced_at = datetime.utcnow()
@@ -383,6 +395,7 @@ async def upload_ipo_list(
                 auto_detected=False,
                 validated=final_validated,
                 registrar_id=registrar_id,
+                name_key=normalized,
             )
             db.add(new_ipo)
             existing_by_name[normalized] = new_ipo

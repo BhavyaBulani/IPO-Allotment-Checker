@@ -62,10 +62,22 @@ class IPO(Base):
     # -> Closed) only once this reaches ipo_sync.retire.RETIRE_AFTER_SCANS, so a
     # single failed or partial scrape cannot empty the dropdown.
     absent_scan_count = Column(Integer, nullable=False, server_default=text("0"))
+    # The shared name-matching key from ipo_sync.name_key.normalize_ipo_name.
+    # Stored as a column so the database can enforce "one row per company"
+    # rather than trusting every code path to compute the same key by hand —
+    # three implementations of it had quietly diverged, which is how
+    # "Ashutosh Fibre" and "ASHUTOSH FIBRE LIMITED SME" became two rows.
+    # Nullable because a name too odd to normalize stores NULL, and both MySQL
+    # and SQLite allow repeated NULLs in a unique index.
+    name_key = Column(String(255), nullable=True)
 
     allotment_results = relationship("AllotmentResult", back_populates="ipo")
     batch_ipos = relationship("BatchIPO", back_populates="ipo")
     registrar = relationship("Registrar")
+
+    __table_args__ = (
+        Index('uq_ipos_name_key', 'name_key', unique=True),
+    )
 
 class Registrar(Base):
     __tablename__ = "registrars"
@@ -169,3 +181,26 @@ class BigshareFlow(Base):
     __table_args__ = (
         Index('idx_bigshare_flows_last_activity', 'last_activity'),
     )
+
+
+class RegistrarScanHealth(Base):
+    """When a registrar's allotment portal was last read successfully.
+
+    The registrar dropdown scan decides both publication and retirement, and it
+    acts only on portals it read *conclusively*. So a portal whose DOM changes
+    (every scrape now raises, or returns nothing) stops affecting the data at
+    all: no errors, no retirements, and ``/health`` stays green while the
+    dropdown silently fills back up with dead IPOs. This row is what makes that
+    state visible — see ipo_sync/scan_health.py and ``/health/registrars``.
+    """
+    __tablename__ = "registrar_scan_health"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    registrar_name = Column(String(100), unique=True, nullable=False)
+    last_attempt_at = Column(DateTime, nullable=True)
+    last_success_at = Column(DateTime, nullable=True)
+    # The most recent failure reason, truncated to fit. Never a PAN or any
+    # client identifier: this is a scraper error string only.
+    last_error = Column(String(500), nullable=True)
+    consecutive_failures = Column(Integer, nullable=False, server_default=text("0"))
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

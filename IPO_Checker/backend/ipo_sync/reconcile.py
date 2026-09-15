@@ -15,8 +15,8 @@ admin review queue, rather than silently guessed.
 """
 
 from dataclasses import dataclass, field
-import re
 
+from ipo_sync.name_key import normalize_ipo_name
 from ipo_sync.registrar_map import resolve_registrar_name
 
 # Sources whose single-source presence is still trustworthy enough to
@@ -43,13 +43,14 @@ class ReconciledIPO:
 
 
 def _normalize_name_for_match(value: str) -> str:
-    value = re.sub(r"\s*&\s*", " and ", value or "")
-    value = re.sub(r"\([^)]*\)", " ", value or "")
-    value = re.sub(r"[-\u2013\u2014]", " ", value or "")
-    value = re.sub(r"\b(limited|ltd|private|pvt)\b\.?", "", value or "", flags=re.I)
-    value = re.sub(r"\bsme\b\.?", "", value or "", flags=re.I)
-    value = re.sub(r"\s+", " ", value).strip().lower()
-    return value
+    """Matching key for an IPO name.
+
+    Delegates to ipo_sync.name_key, the single implementation shared with the
+    auto-sync pipeline and the manual upload endpoint — those used to be three
+    separate copies that disagreed. The local name is kept because
+    ipo_sync/retire.py imports it this way.
+    """
+    return normalize_ipo_name(value)
 
 
 def reconcile(*source_rowsets: list[dict], source_names: list[str] | None = None) -> list[ReconciledIPO]:

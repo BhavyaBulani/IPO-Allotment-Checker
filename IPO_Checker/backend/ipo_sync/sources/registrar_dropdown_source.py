@@ -305,6 +305,13 @@ def fetch_registrar_dropdown_scan(headless: bool | None = None) -> dict:
                     pass
     except Exception as exc:  # noqa: BLE001 - never let discovery break a sync
         logger.warning("Registrar dropdown discovery failed: %s", exc)
+        # Attribute the failure to every portal this run never got a verdict
+        # for. A browser that fails to launch, or a crash between adapters, is
+        # otherwise recorded as *nothing at all* — no registrar in ``failed``,
+        # none in ``conclusive`` — which looks identical to a healthy scan that
+        # found no names, including to the scan-health tracker.
+        for adapter in _ADAPTERS:
+            scan["failed"].setdefault(adapter["registrar_name"], str(exc))
         return scan
 
     logger.info(

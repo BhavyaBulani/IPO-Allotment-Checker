@@ -40,6 +40,8 @@ from ipo_sync.sources.ipotracker_source import fetch_ipotracker_ipos
 from ipo_sync.sources.finapi_source import fetch_finapi_ipos
 from ipo_sync.sources.registrar_dropdown_source import fetch_registrar_dropdown_scan
 from ipo_sync.reconcile import reconcile, ReconciledIPO
+from ipo_sync.name_key import normalize_ipo_name
+from ipo_sync.scan_health import record_scan_health
 from ipo_sync.retire import (
     RETIRE_AFTER_SCANS,
     RETIRED,
@@ -69,31 +71,18 @@ def is_sane_ipo(name: str, status: IPOStatus) -> bool:
 
 
 def _normalize_name_for_match(value: str) -> str:
-    # Match on the same suffix-insensitive key everywhere so a dropdown name
-    # like "Foo Ltd" and an exchange name "Foo Limited" update one row instead
-    # of creating a duplicate.
-    return _normalize_name_loose(value)
+    # Match on the one shared key everywhere so a dropdown name like "Foo Ltd"
+    # and an exchange name "Foo Limited" update one row, not create two.
+    return normalize_ipo_name(value)
 
 
 def _normalize_name_loose(value: str) -> str:
-    """Name key that ignores legal-suffix differences (Ltd/Pvt/Limited),
-    parenthetical qualifiers, hyphen/en-dash spacing and trailing "SME" tags.
+    """Alias for the shared name key (see ipo_sync/name_key.py).
 
-    This keeps variants reported by different sources — "Fly-Hi Maritime
-    Travels" vs "FLY HI MARITIME TRAVELS", or "Tempsens Instruments" vs
-    "Tempsens Instruments (India) Limited", or "Phychem Technologies" vs
-    "Phychem Technologies Limited - SME" — on one row instead of creating
-    duplicate (and therefore held-for-review) rows.
+    Kept as its own name because it reads better at the call sites that compare
+    a registrar dropdown name against an exchange name.
     """
-    value = re.sub(r"\s*&\s*", " and ", value or "")
-    # Parenthetical qualifiers ("(India)", "(NSE)", ...) carry no matching signal.
-    value = re.sub(r"\([^)]*\)", " ", value or "")
-    # Hyphens/en-dashes are often just spacing: "Fly-Hi" == "Fly Hi".
-    value = re.sub(r"[-\u2013\u2014]", " ", value or "")
-    value = re.sub(r"\b(limited|ltd|private|pvt)\b\.?", "", value or "", flags=re.I)
-    # Trailing SME marker is an exchange/aggregator tag, not part of the name.
-    value = re.sub(r"\bsme\b\.?", "", value or "", flags=re.I)
-    return re.sub(r"\s+", " ", value).strip().lower()
+    return normalize_ipo_name(value)
 
 
 def _make_external_id(sources: list[str], normalized_name: str) -> str:
@@ -291,6 +280,11 @@ def _upsert(db, record: ReconciledIPO, existing_by_name: dict[str, IPO], inactiv
         if existing.validated != final_validated:
             existing.validated = final_validated
             changed = True
+        if normalized_name and existing.name_key != normalized_name:
+            # A row created before name_key existed — or by a path that did not
+            # set it — adopts the key the first time the sync sees it.
+            existing.name_key = normalized_name
+            changed = True
         existing.source = "+".join(record.sources)
         if changed:
             existing.synced_at = datetime.datetime.utcnow()
@@ -308,6 +302,7 @@ def _upsert(db, record: ReconciledIPO, existing_by_name: dict[str, IPO], inactiv
         auto_detected=True,
         validated=final_validated,
         registrar_id=registrar_id,
+        name_key=normalized_name,
     )
     db.add(new_ipo)
     return "added"
@@ -446,9 +441,24 @@ def sync_ipos(include_registrar_dropdown: bool | None = None) -> dict:
             dropdown_scan = None
             dropdown_rows = []
 
+    # Record whether each portal was actually readable, before anything can
+    # return early. A scan that read nothing is otherwise indistinguishable from
+    # a scan that found nothing — which is how a changed DOM stops the dropdown
+    # from being updated at all while every health endpoint stays green.
+    scan_health = {"recorded": 0, "healthy": [], "failing": [], "alerting": []}
+    if include_registrar_dropdown:
+        scan_health = record_scan_health(dropdown_scan)
+        if scan_health.get("failing"):
+            logger.warning(
+                "Registrar dropdown scan could not read: %s. Names on those "
+                "portals can be neither published nor retired until a scan "
+                "succeeds.",
+                ", ".join(scan_health["failing"]),
+            )
+
     if not nse_rows and not bse_rows and not upstox_rows and not ipotracker_rows and not finapi_rows and not dropdown_rows:
         logger.warning("NSE, BSE, Upstox, ipotracker, FinAPI, and registrar dropdowns were all unreachable this run. Database left unchanged.")
-        return {"added": 0, "updated": 0, "held_for_review": 0, "retired": 0, "retired_names": [], "source": "none"}
+        return {"added": 0, "updated": 0, "held_for_review": 0, "retired": 0, "retired_names": [], "source": "none", "registrar_scan": scan_health}
 
     records = reconcile(
         nse_rows, bse_rows, upstox_rows, ipotracker_rows, finapi_rows,
@@ -461,9 +471,14 @@ def sync_ipos(include_registrar_dropdown: bool | None = None) -> dict:
     added = updated = held_for_review = 0
     retirement = {"retired": 0, "absent": 0, "still_live": 0, "inconclusive": 0, "retired_names": []}
     try:
-        existing_by_name = {
-            _normalize_name_for_match(ipo.name): ipo for ipo in db.query(IPO).all()
-        }
+        # Keyed on the stored name_key, falling back to computing it for a row
+        # written before the column existed. setdefault keeps this deterministic
+        # (lowest id wins) if two rows ever still share a key.
+        existing_by_name: dict[str, IPO] = {}
+        for ipo in db.query(IPO).all():
+            key = ipo.name_key or _normalize_name_for_match(ipo.name)
+            if key:
+                existing_by_name.setdefault(key, ipo)
         inactive_registrar_ids = {
             r.id for r in db.query(Registrar).filter(Registrar.active == False).all()
         }
@@ -493,7 +508,7 @@ def sync_ipos(include_registrar_dropdown: bool | None = None) -> dict:
     except Exception as exc:
         db.rollback()
         logger.error("Database error during IPO sync: %s", exc, exc_info=True)
-        return {"added": 0, "updated": 0, "held_for_review": 0, "retired": 0, "source": "error", "error": str(exc)}
+        return {"added": 0, "updated": 0, "held_for_review": 0, "retired": 0, "source": "error", "error": str(exc), "registrar_scan": scan_health}
     finally:
         db.close()
 
@@ -519,6 +534,7 @@ def sync_ipos(include_registrar_dropdown: bool | None = None) -> dict:
         "retired": retirement["retired"],
         "retired_names": retirement["retired_names"],
         "source": sources_used,
+        "registrar_scan": scan_health,
     }
 
 

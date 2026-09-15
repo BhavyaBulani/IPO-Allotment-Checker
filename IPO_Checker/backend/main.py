@@ -96,6 +96,53 @@ def _ensure_ipo_absence_column() -> None:
         )
 
 
+def _ensure_ipo_name_key_column() -> None:
+    """Add ``ipos.name_key``, backfill it, and add its unique index if missing.
+
+    Same reasoning as ``_ensure_ipo_absence_column``: ``alembic upgrade head`` in
+    the start command normally does this, but a bare ``uvicorn`` deployment never
+    runs migrations, and without the column the sync's upsert and the manual
+    upload both fail.
+
+    The backfill itself comes from ``ipo_sync.name_key_backfill`` so the repair
+    is byte-for-byte the migration's — including which duplicate row survives.
+    """
+    from sqlalchemy import inspect, text
+
+    from db.session import engine
+
+    inspector = inspect(engine)
+    if "ipos" not in inspector.get_table_names():
+        return
+
+    if "name_key" not in {c["name"] for c in inspector.get_columns("ipos")}:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE ipos ADD COLUMN name_key VARCHAR(255) NULL"))
+
+    # Idempotent, and it de-duplicates before the unique index goes on — the
+    # index cannot be created while two rows still share a key.
+    from ipo_sync.name_key_backfill import apply_name_key_backfill
+
+    apply_name_key_backfill(engine)
+
+    inspector = inspect(engine)
+    if "uq_ipos_name_key" not in {i["name"] for i in inspector.get_indexes("ipos")}:
+        with engine.begin() as conn:
+            conn.execute(text("CREATE UNIQUE INDEX uq_ipos_name_key ON ipos (name_key)"))
+
+
+def _ensure_registrar_scan_health_table() -> None:
+    """Create ``registrar_scan_health`` if it does not already exist.
+
+    Without it the per-registrar scan health is simply not recorded, which is
+    how a registrar portal that has stopped being readable stays invisible.
+    """
+    from db.models import RegistrarScanHealth
+    from db.session import engine
+
+    RegistrarScanHealth.__table__.create(bind=engine, checkfirst=True)
+
+
 async def _periodic_ipo_sync():
     """Background task that syncs IPOs every IPO_SYNC_INTERVAL_SECONDS."""
     while True:
@@ -184,6 +231,16 @@ async def lifespan(app: FastAPI):
         logger.info("IPO absence counter column is ready.")
     except Exception as e:
         logger.warning(f"Could not ensure the IPO absence counter column: {e}")
+    try:
+        _ensure_ipo_name_key_column()
+        logger.info("IPO name key column, backfill and unique index are ready.")
+    except Exception as e:
+        logger.warning(f"Could not ensure the IPO name key column: {e}")
+    try:
+        _ensure_registrar_scan_health_table()
+        logger.info("Registrar scan health table is ready.")
+    except Exception as e:
+        logger.warning(f"Could not ensure the registrar scan health table: {e}")
     try:
         from ipo_sync.auto_detect import sync_ipos
         # Run the sync in a worker thread so its HTTP calls never block the
@@ -316,3 +373,27 @@ def health_scrapers_check():
     from registrar_services.website_error_monitor import website_error_monitor
 
     return website_error_monitor.snapshot()
+
+
+@app.get("/health/registrars")
+def health_registrars_check():
+    """Report whether each registrar's allotment portal is still being read.
+
+    This is the gap the other probes cannot see. ``/health`` and ``/health/db``
+    are green while every scraper is broken, and ``/health/scrapers`` only
+    reflects checks that a user already ran. The registrar dropdown scan, by
+    contrast, only ever acts on portals it read *conclusively* — so a portal
+    whose DOM has changed quietly stops publishing and stops retiring, and the
+    dropdown freezes with no error anywhere.
+
+    Returns 503 once a registrar has failed ``SCAN_FAILURE_ALERT_THRESHOLD``
+    consecutive scans, so a plain uptime monitor watching for non-200 catches
+    it. ``status: degraded`` with one bad registrar and 503 is deliberate:
+    names on an unreadable portal can be neither published nor retired, so part
+    of the product is not working even though the API is answering.
+    """
+    from ipo_sync.scan_health import snapshot
+
+    body = snapshot()
+    status_code = 503 if body.get("status") == "degraded" else 200
+    return JSONResponse(status_code=status_code, content=body)
