@@ -13,6 +13,7 @@ from api.deps import require_auth
 from db.models import AllotmentResult, BatchIPO, IPO, IPOStatus, Registrar
 from db.session import get_db
 from ipo_sync.registrar_map import resolve_registrar_name
+from ipo_sync.retire import RETIRE_AFTER_SCANS
 
 router = APIRouter()
 
@@ -114,6 +115,11 @@ def list_all_ipos_admin(
             "source": ipo.source,
             "close_date": ipo.close_date,
             "synced_at": ipo.synced_at,
+            # Consecutive registrar-dropdown scans that found this IPO missing
+            # from its registrar's portal. Reaching the retirement threshold is
+            # why a row stopped appearing in the client-facing dropdown.
+            "absent_scan_count": ipo.absent_scan_count or 0,
+            "retired": (ipo.absent_scan_count or 0) >= RETIRE_AFTER_SCANS,
         }
         for ipo, registrar_name in rows
     ]

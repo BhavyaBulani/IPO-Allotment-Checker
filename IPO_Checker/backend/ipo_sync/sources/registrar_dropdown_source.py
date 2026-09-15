@@ -215,26 +215,39 @@ def _scrape_adapter(browser, adapter: dict) -> list[str]:
             pass
 
 
-def fetch_registrar_checkable_ipos(headless: bool | None = None) -> list[dict]:
-    """
-    Return a list of dicts for IPOs currently offered in each registrar's
-    allotment dropdown:
+def fetch_registrar_dropdown_scan(headless: bool | None = None) -> dict:
+    """Scrape every registrar portal and report what was found *and* what was read reliably.
 
-        {name, status: "Allotment Announced", registrar_name, registrar_ids}
+    Returns::
 
-    Never raises — a failing registrar contributes [] and logs a warning.
+        {
+          "rows":       [{name, status, registrar_name, registrar_ids}, ...],
+          "live_names": {"KFin Technologies": ["Foo Ltd", ...], ...},
+          "conclusive": ["KFin Technologies", ...],
+          "failed":     {"Bigshare Services": "timeout ..."},
+        }
+
+    ``conclusive`` lists the registrars whose dropdown was read without error AND
+    yielded at least one option. A portal that raised, or that returned an empty
+    list (the classic symptom of a changed DOM), is deliberately NOT conclusive:
+    absence from a list that could not be read means nothing, so callers must
+    consult this set — never ``rows`` alone — before treating a missing name as
+    having been removed from the portal.
+
+    Never raises.
     """
     if headless is None:
         raw = os.environ.get("REGISTRAR_DROPDOWN_HEADLESS", "1")
         headless = raw.strip().lower() in {"1", "true", "yes", "on"}
 
+    scan: dict = {"rows": [], "live_names": {}, "conclusive": [], "failed": {}}
+
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         logger.warning("Playwright is not installed; skipping registrar dropdown discovery.")
-        return []
+        return scan
 
-    results: list[dict] = []
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=headless)
@@ -248,22 +261,43 @@ def fetch_registrar_checkable_ipos(headless: bool | None = None) -> list[dict]:
                             "Registrar dropdown discovery failed for %s: %s",
                             registrar, exc,
                         )
-                        names = []
+                        scan["failed"][registrar] = str(exc)
+                        continue
+
+                    if not names:
+                        # An empty dropdown is far more often a changed/partial
+                        # DOM than a registrar that genuinely has nothing live,
+                        # so treat it as unread rather than as "everything this
+                        # registrar ever listed has now been removed".
+                        logger.warning(
+                            "Registrar dropdown for %s returned no options; "
+                            "treating this scan as inconclusive for that registrar.",
+                            registrar,
+                        )
+                        scan["failed"][registrar] = "no options returned (possible DOM change)"
+                        continue
+
+                    # Read reliably: its absence from here on is meaningful.
+                    scan["conclusive"].append(registrar)
+                    scan["live_names"].setdefault(registrar, [])
+
+                    equity_names = []
                     for name in names:
                         name = _clean_issue_name(name)
                         if not is_equity_ipo(name):
                             continue
-                        results.append({
+                        equity_names.append(name)
+                        scan["live_names"][registrar].append(name)
+                        scan["rows"].append({
                             "name": name,
                             "status": STATUS_ANNOUNCED,
                             "registrar_name": registrar,
                             "registrar_ids": list(adapter["registrar_ids"]),
                         })
-                    if names:
-                        logger.info(
-                            "Registrar dropdown discovery: %s -> %d IPO(s): %s",
-                            registrar, len(names), ", ".join(names),
-                        )
+                    logger.info(
+                        "Registrar dropdown discovery: %s -> %d equity IPO(s): %s",
+                        registrar, len(equity_names), ", ".join(equity_names),
+                    )
             finally:
                 try:
                     browser.close()
@@ -271,7 +305,27 @@ def fetch_registrar_checkable_ipos(headless: bool | None = None) -> list[dict]:
                     pass
     except Exception as exc:  # noqa: BLE001 - never let discovery break a sync
         logger.warning("Registrar dropdown discovery failed: %s", exc)
-        return []
+        return scan
 
-    logger.info("Registrar dropdown discovery returned %d checkable IPO names", len(results))
-    return results
+    logger.info(
+        "Registrar dropdown discovery returned %d checkable IPO name(s) from %d registrar(s); %d registrar(s) unread.",
+        len(scan["rows"]), len(scan["conclusive"]), len(scan["failed"]),
+    )
+    return scan
+
+
+def fetch_registrar_checkable_ipos(headless: bool | None = None) -> list[dict]:
+    """
+    Return a list of dicts for IPOs currently offered in each registrar's
+    allotment dropdown:
+
+        {name, status: "Allotment Announced", registrar_name, registrar_ids}
+
+    Flat-list view of :func:`fetch_registrar_dropdown_scan`, kept for callers
+    that only care about the names. Callers that decide *removal* must use the
+    detailed scan instead, so they can tell a name that is genuinely gone from
+    one that merely could not be read.
+
+    Never raises — a failing registrar contributes [] and logs a warning.
+    """
+    return fetch_registrar_dropdown_scan(headless=headless)["rows"]

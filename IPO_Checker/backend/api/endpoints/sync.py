@@ -15,11 +15,20 @@ def sync_ipos(db: Session = Depends(get_db), _: str = Depends(require_auth)):
     """
     try:
         result = sync_ipos_from_dashboard()
+        retired = result.get("retired", 0)
+        message = (
+            f"IPO sync complete. Added {result['added']}, updated {result['updated']}"
+            f" from {result['source']}."
+        )
+        if retired:
+            message += f" Retired {retired} IPO(s) no longer listed on their registrar portal."
         return {
             "status": "success",
-            "message": f"IPO sync complete. Added {result['added']}, updated {result['updated']} from {result['source']}.",
+            "message": message,
             "added": result["added"],
             "updated": result["updated"],
+            "retired": retired,
+            "retired_names": result.get("retired_names", []),
             "source": result["source"],
         }
     except Exception as e:

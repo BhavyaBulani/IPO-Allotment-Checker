@@ -32,12 +32,13 @@ def run_sync():
             f"IPO sync job completed. "
             f"Added: {result['added']}, "
             f"Updated: {result['updated']}, "
+            f"Retired: {result.get('retired', 0)}, "
             f"Source: {result['source']}"
         )
         return result
     except Exception as e:
         logger.error(f"IPO sync job failed: {e}", exc_info=True)
-        return {"added": 0, "updated": 0, "source": "error"}
+        return {"added": 0, "updated": 0, "retired": 0, "source": "error"}
 
 
 if __name__ == "__main__":

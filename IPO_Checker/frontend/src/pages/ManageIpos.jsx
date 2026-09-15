@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Loader2, AlertCircle, Trash2, Landmark, Search, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertCircle, Trash2, Landmark, Search, ShieldCheck, ShieldAlert, Archive } from 'lucide-react';
 import api, { apiErrorMessage } from '../lib/api';
 
 const STATUS_STYLE = {
@@ -38,7 +38,10 @@ export default function ManageIpos() {
   const filtered = useMemo(() => {
     return ipos.filter((ipo) => {
       if (filter === 'published' && !ipo.validated) return false;
-      if (filter === 'held' && ipo.validated) return false;
+      // A retired row is unpublished too, but it was dropped by its registrar,
+      // not parked for admin review — keep the two apart.
+      if (filter === 'held' && (ipo.validated || ipo.retired)) return false;
+      if (filter === 'retired' && !ipo.retired) return false;
       if (query && !ipo.name.toLowerCase().includes(query.toLowerCase())) return false;
       return true;
     });
@@ -98,7 +101,8 @@ export default function ManageIpos() {
   };
 
   const publishedCount = ipos.filter((i) => i.validated).length;
-  const heldCount = ipos.length - publishedCount;
+  const retiredCount = ipos.filter((i) => i.retired).length;
+  const heldCount = ipos.length - publishedCount - retiredCount;
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-[#f6f5f0] p-6 pb-20">
@@ -110,14 +114,20 @@ export default function ManageIpos() {
         <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
             <h1 className="mb-2 text-3xl font-bold text-stone-900">Manage IPOs</h1>
-            <p className="text-stone-500">View the full catalogue, including held-for-review rows, and delete stale or duplicate entries.</p>
+            <p className="text-stone-500">View the full catalogue, including held-for-review and retired rows, and delete stale or duplicate entries.</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
               <ShieldCheck size={16} className="mr-1 inline" /> {publishedCount} published
             </div>
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
               <ShieldAlert size={16} className="mr-1 inline" /> {heldCount} held
+            </div>
+            <div
+              className="rounded-xl border border-stone-300 bg-stone-100 px-4 py-2 text-sm text-stone-600"
+              title="No longer listed in their registrar's allotment dropdown, so no longer offered for checking."
+            >
+              <Archive size={16} className="mr-1 inline" /> {retiredCount} retired
             </div>
           </div>
         </div>
@@ -128,6 +138,7 @@ export default function ManageIpos() {
               ['all', 'All'],
               ['published', 'Published'],
               ['held', 'Held for review'],
+              ['retired', 'Retired by registrar'],
             ].map(([value, label]) => (
               <button
                 key={value}
@@ -231,11 +242,20 @@ export default function ManageIpos() {
                       </td>
                       <td className="px-4 py-3 text-sm text-stone-400">{ipo.source || '—'}</td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                          ipo.validated ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'
-                        }`}>
-                          {ipo.validated ? 'Published' : 'Held'}
-                        </span>
+                        {ipo.retired ? (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-600"
+                            title={`Removed from the registrar's portal; absent from ${ipo.absent_scan_count} consecutive sync scans.`}
+                          >
+                            <Archive size={12} /> Retired
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                            ipo.validated ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'
+                          }`}>
+                            {ipo.validated ? 'Published' : 'Held'}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button

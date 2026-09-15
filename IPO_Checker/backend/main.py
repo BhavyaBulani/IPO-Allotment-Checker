@@ -72,6 +72,30 @@ def _ensure_bigshare_flow_table() -> None:
     BigshareFlow.__table__.create(bind=engine, checkfirst=True)
 
 
+def _ensure_ipo_absence_column() -> None:
+    """Add ``ipos.absent_scan_count`` if the deployed schema predates it.
+
+    ``alembic upgrade head`` in the start command normally adds this, but some
+    services are deployed with a bare ``uvicorn`` start command that never runs
+    migrations. Without the column the sync's upsert *and* the stale-IPO
+    retirement query both fail, so create it idempotently at startup, exactly as
+    ``_ensure_bigshare_flow_table`` does for its table.
+    """
+    from sqlalchemy import inspect, text
+
+    from db.session import engine
+
+    inspector = inspect(engine)
+    if "ipos" not in inspector.get_table_names():
+        return
+    if "absent_scan_count" in {c["name"] for c in inspector.get_columns("ipos")}:
+        return
+    with engine.begin() as conn:
+        conn.execute(
+            text("ALTER TABLE ipos ADD COLUMN absent_scan_count INTEGER NOT NULL DEFAULT 0")
+        )
+
+
 async def _periodic_ipo_sync():
     """Background task that syncs IPOs every IPO_SYNC_INTERVAL_SECONDS."""
     while True:
@@ -84,6 +108,7 @@ async def _periodic_ipo_sync():
             logger.info(
                 f"Periodic IPO sync complete. "
                 f"Added: {result['added']}, Updated: {result['updated']}, "
+                f"Retired: {result.get('retired', 0)}, "
                 f"Source: {result['source']}"
             )
         except Exception as e:
@@ -107,6 +132,7 @@ async def _periodic_registrar_dropdown_sync():
             logger.info(
                 f"Registrar dropdown sync complete. "
                 f"Added: {result['added']}, Updated: {result['updated']}, "
+                f"Retired: {result.get('retired', 0)}, "
                 f"Source: {result['source']}"
             )
         except Exception as e:
@@ -154,6 +180,11 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Could not ensure Bigshare CAPTCHA flow table: {e}")
     try:
+        _ensure_ipo_absence_column()
+        logger.info("IPO absence counter column is ready.")
+    except Exception as e:
+        logger.warning(f"Could not ensure the IPO absence counter column: {e}")
+    try:
         from ipo_sync.auto_detect import sync_ipos
         # Run the sync in a worker thread so its HTTP calls never block the
         # event loop, and explicitly skip the Playwright registrar-dropdown
@@ -161,7 +192,7 @@ async def lifespan(app: FastAPI):
         # handles that shortly after startup). Running Playwright's sync API
         # inside the asyncio loop raises "Sync API inside the asyncio loop".
         result = await asyncio.to_thread(sync_ipos, False)
-        logger.info(f"IPO auto-sync result: Added {result['added']}, Updated {result['updated']} from {result['source']}")
+        logger.info(f"IPO auto-sync result: Added {result['added']}, Updated {result['updated']}, Retired {result.get('retired', 0)} from {result['source']}")
     except Exception as e:
         logger.warning(f"IPO auto-sync failed on startup: {e}. Keeping existing IPO rows as fallback.")
 

@@ -38,8 +38,14 @@ from ipo_sync.sources.bse_source import fetch_bse_ipos
 from ipo_sync.sources.upstox_source import fetch_upstox_ipos
 from ipo_sync.sources.ipotracker_source import fetch_ipotracker_ipos
 from ipo_sync.sources.finapi_source import fetch_finapi_ipos
-from ipo_sync.sources.registrar_dropdown_source import fetch_registrar_checkable_ipos
+from ipo_sync.sources.registrar_dropdown_source import fetch_registrar_dropdown_scan
 from ipo_sync.reconcile import reconcile, ReconciledIPO
+from ipo_sync.retire import (
+    RETIRE_AFTER_SCANS,
+    RETIRED,
+    RetireCandidate,
+    plan_retirement,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -307,11 +313,85 @@ def _upsert(db, record: ReconciledIPO, existing_by_name: dict[str, IPO], inactiv
     return "added"
 
 
+def _retire_stale_dropdown_ipos(
+    db,
+    live_names_by_registrar: dict[str, list[str]],
+    conclusive_registrars: list[str] | set[str],
+) -> dict:
+    """Hide IPOs that a registrar has removed from its allotment portal.
+
+    Scope is deliberately narrow: only rows whose ``source`` records the
+    registrar dropdown are considered — i.e. rows that *the dropdown itself*
+    made checkable. A manually uploaded IPO is curated by the brokerage and is
+    never touched here, even if its registrar has since dropped the name.
+
+    A row is hidden (``validated=False``, status back to ``Closed``) only once
+    ``retire.plan_retirement`` reports it absent from a *conclusively read*
+    portal for ``RETIRE_AFTER_SCANS`` scans running. Rows are never deleted:
+    saved ``allotment_results`` reference ``ipos.id``, so a delete would destroy
+    check history. A hidden row stays visible in ``/api/ipos/admin`` and is
+    republished automatically if the registrar lists the name again.
+    """
+    rows = (
+        db.query(IPO, Registrar.name)
+        .outerjoin(Registrar, IPO.registrar_id == Registrar.id)
+        .filter(
+            IPO.validated == True,  # noqa: E712 - SQLAlchemy needs ==
+            IPO.status == IPOStatus.Allotment_Announced,
+            IPO.source.like("%registrar-dropdown%"),
+        )
+        .all()
+    )
+
+    candidates = [
+        RetireCandidate(
+            name=ipo.name,
+            registrar_name=registrar_name,
+            absent_scan_count=ipo.absent_scan_count or 0,
+        )
+        for ipo, registrar_name in rows
+    ]
+    verdicts = plan_retirement(candidates, live_names_by_registrar, conclusive_registrars)
+
+    summary = {
+        "retired": 0,
+        "absent": 0,
+        "still_live": 0,
+        "inconclusive": 0,
+        "retired_names": [],
+    }
+    # plan_retirement returns exactly one verdict per candidate, in order.
+    for (ipo, registrar_name), verdict in zip(rows, verdicts):
+        if ipo.absent_scan_count != verdict.absent_scan_count:
+            ipo.absent_scan_count = verdict.absent_scan_count
+        summary[verdict.outcome] += 1
+        if verdict.outcome == RETIRED:
+            ipo.status = IPOStatus.Closed
+            ipo.validated = False
+            summary["retired_names"].append(f"{ipo.name} ({registrar_name})")
+
+    if summary["retired"]:
+        logger.info(
+            "Retired %d IPO(s) no longer listed on their registrar portal: %s",
+            summary["retired"], ", ".join(summary["retired_names"][:20]),
+        )
+    elif summary["absent"]:
+        logger.info(
+            "%d IPO(s) newly absent from a registrar portal; they are hidden "
+            "after %d consecutive scans.",
+            summary["absent"], RETIRE_AFTER_SCANS,
+        )
+
+    return summary
+
+
 def sync_ipos(include_registrar_dropdown: bool | None = None) -> dict:
     """
     Main entry point. Fetches NSE + BSE (+ Upstox), reconciles, and — when
     enabled — promotes IPOs whose allotment is live on their registrar portal
-    (the authoritative "Allotment Announced" signal).
+    (the authoritative "Allotment Announced" signal) and retires those the
+    registrar has since dropped from that portal, so the client-facing dropdown
+    only ever offers IPOs that can actually be checked today.
 
     ``include_registrar_dropdown`` defaults to the
     ENABLE_REGISTRAR_DROPDOWN_DISCOVERY env var (default off) so the 4-hour
@@ -356,16 +436,19 @@ def sync_ipos(include_registrar_dropdown: bool | None = None) -> dict:
         finapi_rows = []
 
     dropdown_rows = []
+    dropdown_scan = None
     if include_registrar_dropdown:
         try:
-            dropdown_rows = fetch_registrar_checkable_ipos()
+            dropdown_scan = fetch_registrar_dropdown_scan()
+            dropdown_rows = dropdown_scan["rows"]
         except Exception as exc:
             logger.error("Registrar dropdown discovery raised unexpectedly: %s", exc, exc_info=True)
+            dropdown_scan = None
             dropdown_rows = []
 
     if not nse_rows and not bse_rows and not upstox_rows and not ipotracker_rows and not finapi_rows and not dropdown_rows:
         logger.warning("NSE, BSE, Upstox, ipotracker, FinAPI, and registrar dropdowns were all unreachable this run. Database left unchanged.")
-        return {"added": 0, "updated": 0, "held_for_review": 0, "source": "none"}
+        return {"added": 0, "updated": 0, "held_for_review": 0, "retired": 0, "retired_names": [], "source": "none"}
 
     records = reconcile(
         nse_rows, bse_rows, upstox_rows, ipotracker_rows, finapi_rows,
@@ -376,6 +459,7 @@ def sync_ipos(include_registrar_dropdown: bool | None = None) -> dict:
 
     db = SessionLocal()
     added = updated = held_for_review = 0
+    retirement = {"retired": 0, "absent": 0, "still_live": 0, "inconclusive": 0, "retired_names": []}
     try:
         existing_by_name = {
             _normalize_name_for_match(ipo.name): ipo for ipo in db.query(IPO).all()
@@ -391,11 +475,25 @@ def sync_ipos(include_registrar_dropdown: bool | None = None) -> dict:
                 updated += 1
             if not record.validated:
                 held_for_review += 1
+
+        # Deliberately after the upsert loop: a name the portal just re-listed
+        # is already published above, and its absence counter is reset below, so
+        # one scan can never both publish and retire the same row.
+        #
+        # Skipped entirely when the dropdown scan did not run (the fast 4-hour
+        # sync) — retirement must never be inferred from a scan that never
+        # happened.
+        if dropdown_scan is not None:
+            retirement = _retire_stale_dropdown_ipos(
+                db,
+                dropdown_scan.get("live_names") or {},
+                dropdown_scan.get("conclusive") or [],
+            )
         db.commit()
     except Exception as exc:
         db.rollback()
         logger.error("Database error during IPO sync: %s", exc, exc_info=True)
-        return {"added": 0, "updated": 0, "held_for_review": 0, "source": "error", "error": str(exc)}
+        return {"added": 0, "updated": 0, "held_for_review": 0, "retired": 0, "source": "error", "error": str(exc)}
     finally:
         db.close()
 
@@ -411,13 +509,15 @@ def sync_ipos(include_registrar_dropdown: bool | None = None) -> dict:
     ) or "none"
 
     logger.info(
-        "IPO sync complete. Added: %d, Updated: %d, Held for review: %d, Sources: %s",
-        added, updated, held_for_review, sources_used,
+        "IPO sync complete. Added: %d, Updated: %d, Held for review: %d, Retired: %d, Sources: %s",
+        added, updated, held_for_review, retirement["retired"], sources_used,
     )
     return {
         "added": added,
         "updated": updated,
         "held_for_review": held_for_review,
+        "retired": retirement["retired"],
+        "retired_names": retirement["retired_names"],
         "source": sources_used,
     }
 

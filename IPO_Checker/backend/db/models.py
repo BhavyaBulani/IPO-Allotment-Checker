@@ -56,6 +56,12 @@ class IPO(Base):
     auto_detected = Column(Boolean, nullable=False, server_default=text("0"))
     validated = Column(Boolean, nullable=False, server_default=text("0"))
     registrar_id = Column(Integer, ForeignKey("registrars.id"), nullable=True)
+    # Consecutive registrar-dropdown scans in which this IPO was conclusively
+    # observed to be *absent* from its registrar's portal. Reset to 0 whenever
+    # the portal lists it again. The sync hides a row (validated=False, status
+    # -> Closed) only once this reaches ipo_sync.retire.RETIRE_AFTER_SCANS, so a
+    # single failed or partial scrape cannot empty the dropdown.
+    absent_scan_count = Column(Integer, nullable=False, server_default=text("0"))
 
     allotment_results = relationship("AllotmentResult", back_populates="ipo")
     batch_ipos = relationship("BatchIPO", back_populates="ipo")
