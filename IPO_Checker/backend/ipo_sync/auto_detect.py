@@ -313,12 +313,15 @@ def _retire_stale_dropdown_ipos(
     live_names_by_registrar: dict[str, list[str]],
     conclusive_registrars: list[str] | set[str],
 ) -> dict:
-    """Hide IPOs that a registrar has removed from its allotment portal.
+    """Hide any checkable IPO that a registrar has removed from its portal.
 
-    Scope is deliberately narrow: only rows whose ``source`` records the
-    registrar dropdown are considered — i.e. rows that *the dropdown itself*
-    made checkable. A manually uploaded IPO is curated by the brokerage and is
-    never touched here, even if its registrar has since dropped the name.
+    Scope is every row currently offered as checkable (``validated=True`` and
+    ``Allotment Announced``), regardless of how it got there — exchange feed,
+    registrar dropdown, or manual upload. The registrar allotment portal is the
+    authoritative list of names that can actually be checked today, so a row
+    whose registrar has dropped the name must stop being offered even when it
+    was curated by hand; a check against a removed name would otherwise return
+    a fabricated "Not Allotted".
 
     A row is hidden (``validated=False``, status back to ``Closed``) only once
     ``retire.plan_retirement`` reports it absent from a *conclusively read*
@@ -333,7 +336,6 @@ def _retire_stale_dropdown_ipos(
         .filter(
             IPO.validated == True,  # noqa: E712 - SQLAlchemy needs ==
             IPO.status == IPOStatus.Allotment_Announced,
-            IPO.source.like("%registrar-dropdown%"),
         )
         .all()
     )

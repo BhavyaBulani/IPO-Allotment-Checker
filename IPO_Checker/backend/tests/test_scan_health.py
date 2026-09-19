@@ -51,6 +51,28 @@ def test_conclusive_read_is_healthy_and_reports_its_name_count():
     )
 
 
+def test_a_conclusively_empty_read_is_healthy_with_zero_names():
+    """A server-rendered portal read successfully but with no live IPOs is a
+    healthy read, not a failure — absence there is meaningful."""
+    scan = {
+        "rows": [],
+        "live_names": {"Purva Sharegistry": []},
+        "conclusive": ["Purva Sharegistry"],
+        "failed": {},
+    }
+
+    updates = plan_scan_health(scan)
+
+    assert updates[0] == ScanHealthUpdate(
+        registrar_name="Purva Sharegistry",
+        conclusive=True,
+        live_name_count=0,
+        error=None,
+        consecutive_failures=0,
+        alerting=False,
+    )
+
+
 def test_first_failure_counts_as_one():
     updates = plan_scan_health(SCAN_KFIN_BROKEN)
 

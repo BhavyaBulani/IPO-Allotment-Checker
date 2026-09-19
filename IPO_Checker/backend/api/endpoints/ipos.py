@@ -92,6 +92,10 @@ def get_validated_ipos(
 def list_all_ipos_admin(
     db: Session = Depends(get_db),
     validated: Optional[bool] = Query(None, description="Filter by validated (published) state."),
+    checkable: bool = Query(
+        False,
+        description="Return only IPOs currently offered by a registrar's allotment dropdown (unique by name).",
+    ),
 ):
     """Admin listing of every IPO row, including held-for-review ones.
 
@@ -99,14 +103,33 @@ def list_all_ipos_admin(
     client-facing dropdown), this returns the full catalogue so an admin can
     see and manage rows that are held for review (registrar not mapped, or a
     registrar with no live integration yet) and delete stale/duplicate rows.
+
+    ``checkable=true`` narrows the listing to the one view the brokerage
+    normally cares about: unique IPOs currently listed on a registrar's
+    allotment portal (validated + Allotment Announced), deduplicated by name
+    key so two spellings of one company never appear twice.
     """
     query = db.query(IPO, Registrar.name).outerjoin(Registrar, IPO.registrar_id == Registrar.id)
     if validated is not None:
         query = query.filter(IPO.validated == validated)
+    if checkable:
+        query = query.filter(
+            IPO.validated == True,  # noqa: E712 - SQLAlchemy needs ==
+            IPO.status == IPOStatus.Allotment_Announced,
+        )
     rows = query.order_by(IPO.id).all()
 
-    return [
-        {
+    seen_keys: set[str] = set()
+    result = []
+    for ipo, registrar_name in rows:
+        is_checkable = ipo.validated and ipo.status == IPOStatus.Allotment_Announced
+        if checkable:
+            key = ipo.name_key or normalize_ipo_name(ipo.name)
+            if key:
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+        result.append({
             "id": ipo.id,
             "name": ipo.name,
             "status": ipo.status.value,
@@ -121,9 +144,9 @@ def list_all_ipos_admin(
             # why a row stopped appearing in the client-facing dropdown.
             "absent_scan_count": ipo.absent_scan_count or 0,
             "retired": (ipo.absent_scan_count or 0) >= RETIRE_AFTER_SCANS,
-        }
-        for ipo, registrar_name in rows
-    ]
+            "checkable": is_checkable,
+        })
+    return result
 
 
 # ---------------------------------------------------------------------------

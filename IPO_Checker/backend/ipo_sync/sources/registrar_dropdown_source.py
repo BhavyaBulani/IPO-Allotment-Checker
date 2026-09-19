@@ -123,6 +123,11 @@ _ADAPTERS = [
         "kind": "select",
         "select_selector": _purva.SELECTORS["company_select"],
         "placeholder": "CHOOSE A COMPANY...",
+        # Purva renders the full company list server-side into the initial
+        # HTML. An empty <select> is therefore a trustworthy "nothing is
+        # checkable right now" signal, not a half-loaded DOM — so the scanner
+        # may treat it as conclusive and retire names Purva has dropped.
+        "empty_is_conclusive": True,
     },
     {
         "registrar_name": "MAS Services",
@@ -187,6 +192,21 @@ def _read_mas_name(page) -> list[str]:
     return [match.group(1).strip()] if match else []
 
 
+def _empty_read_outcome(adapter: dict) -> tuple[str, str | None]:
+    """Classify a native-<select> read that returned no options.
+
+    A server-rendered select (``empty_is_conclusive``) that contains only its
+    placeholder is a successful read of an empty dropdown — "nothing checkable
+    right now". Any other empty read is far more likely a half-loaded DOM than
+    a genuinely empty portal, so it must be treated as unread.
+
+    Returns ``("conclusive", None)`` or ``("failed", reason)``.
+    """
+    if adapter.get("empty_is_conclusive"):
+        return ("conclusive", None)
+    return ("failed", "no options returned (possible DOM change)")
+
+
 def _scrape_adapter(browser, adapter: dict) -> list[str]:
     page = browser.new_page()
     try:
@@ -200,13 +220,22 @@ def _scrape_adapter(browser, adapter: dict) -> list[str]:
         if kind == "mas_hub":
             return _dedupe(_read_mas_name(page))
 
-        # Native <select>: wait until it has more than just the placeholder.
+        # Native <select>.
         selector = adapter["select_selector"]
-        page.wait_for_function(
-            "(sel) => { const s = document.querySelector(sel);"
-            " return s && s.options && s.options.length > 1; }",
-            arg=selector,
-        )
+        if adapter.get("empty_is_conclusive"):
+            # The full dropdown is rendered server-side into the initial HTML,
+            # so once the <select> itself is present its options are already
+            # authoritative. An empty list here means "no live IPOs", not
+            # "the options are still loading".
+            page.wait_for_selector(selector, state="attached")
+        else:
+            # Options load via AJAX after the initial HTML; wait until the
+            # select has more than just the placeholder before reading it.
+            page.wait_for_function(
+                "(sel) => { const s = document.querySelector(sel);"
+                " return s && s.options && s.options.length > 1; }",
+                arg=selector,
+            )
         return _dedupe(_read_select_names(page, selector, adapter.get("placeholder")))
     finally:
         try:
@@ -228,11 +257,13 @@ def fetch_registrar_dropdown_scan(headless: bool | None = None) -> dict:
         }
 
     ``conclusive`` lists the registrars whose dropdown was read without error AND
-    yielded at least one option. A portal that raised, or that returned an empty
-    list (the classic symptom of a changed DOM), is deliberately NOT conclusive:
-    absence from a list that could not be read means nothing, so callers must
-    consult this set — never ``rows`` alone — before treating a missing name as
-    having been removed from the portal.
+    yielded at least one option — or, for a server-rendered portal marked
+    ``empty_is_conclusive``, whose dropdown was read without error and found to
+    be empty. A portal that raised, or that returned an empty list without that
+    marker (the classic symptom of a changed DOM), is deliberately NOT
+    conclusive: absence from a list that could not be read means nothing, so
+    callers must consult this set — never ``rows`` alone — before treating a
+    missing name as having been removed from the portal.
 
     Never raises.
     """
@@ -265,16 +296,26 @@ def fetch_registrar_dropdown_scan(headless: bool | None = None) -> dict:
                         continue
 
                     if not names:
-                        # An empty dropdown is far more often a changed/partial
-                        # DOM than a registrar that genuinely has nothing live,
-                        # so treat it as unread rather than as "everything this
-                        # registrar ever listed has now been removed".
-                        logger.warning(
-                            "Registrar dropdown for %s returned no options; "
-                            "treating this scan as inconclusive for that registrar.",
-                            registrar,
-                        )
-                        scan["failed"][registrar] = "no options returned (possible DOM change)"
+                        outcome, reason = _empty_read_outcome(adapter)
+                        if outcome == "conclusive":
+                            # A server-rendered select that contains only its
+                            # placeholder was read successfully: the registrar
+                            # has nothing checkable right now. That is a
+                            # conclusive read — and it is what lets a name that
+                            # has vanished from this portal be retired.
+                            scan["conclusive"].append(registrar)
+                            scan["live_names"].setdefault(registrar, [])
+                            logger.info(
+                                "Registrar dropdown discovery: %s -> 0 equity IPOs (empty dropdown).",
+                                registrar,
+                            )
+                        else:
+                            logger.warning(
+                                "Registrar dropdown for %s returned no options; "
+                                "treating this scan as inconclusive for that registrar.",
+                                registrar,
+                            )
+                            scan["failed"][registrar] = reason
                         continue
 
                     # Read reliably: its absence from here on is meaningful.

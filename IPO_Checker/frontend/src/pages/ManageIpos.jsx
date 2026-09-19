@@ -14,7 +14,7 @@ export default function ManageIpos() {
   const [ipos, setIpos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filter, setFilter] = useState('all'); // all | published | held
+  const [filter, setFilter] = useState('checkable'); // checkable | all | published | held | retired
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
@@ -36,13 +36,24 @@ export default function ManageIpos() {
   }, []);
 
   const filtered = useMemo(() => {
+    const seen = new Set();
     return ipos.filter((ipo) => {
+      if (query && !ipo.name.toLowerCase().includes(query.toLowerCase())) return false;
+      if (filter === 'checkable') {
+        // Only unique IPOs a registrar's portal lists right now. The backend
+        // already enforces one row per name_key, but fold case/whitespace here
+        // too so a stale duplicate can never slip back into this view.
+        if (!ipo.validated || ipo.status !== 'Allotment Announced') return false;
+        const key = ipo.name.trim().toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }
       if (filter === 'published' && !ipo.validated) return false;
       // A retired row is unpublished too, but it was dropped by its registrar,
       // not parked for admin review — keep the two apart.
       if (filter === 'held' && (ipo.validated || ipo.retired)) return false;
       if (filter === 'retired' && !ipo.retired) return false;
-      if (query && !ipo.name.toLowerCase().includes(query.toLowerCase())) return false;
       return true;
     });
   }, [ipos, filter, query]);
@@ -100,6 +111,7 @@ export default function ManageIpos() {
     setSelected(new Set());
   };
 
+  const checkableCount = ipos.filter((i) => i.validated && i.status === 'Allotment Announced').length;
   const publishedCount = ipos.filter((i) => i.validated).length;
   const retiredCount = ipos.filter((i) => i.retired).length;
   const heldCount = ipos.length - publishedCount - retiredCount;
@@ -114,9 +126,12 @@ export default function ManageIpos() {
         <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
             <h1 className="mb-2 text-3xl font-bold text-stone-900">Manage IPOs</h1>
-            <p className="text-stone-500">View the full catalogue, including held-for-review and retired rows, and delete stale or duplicate entries.</p>
+            <p className="text-stone-500">The checkable view shows only unique IPOs currently listed on a registrar's allotment portal. Switch to All/Held/Retired to review the full catalogue.</p>
           </div>
           <div className="flex flex-wrap gap-3">
+            <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-sm text-teal-700">
+              <ShieldCheck size={16} className="mr-1 inline" /> {checkableCount} checkable
+            </div>
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
               <ShieldCheck size={16} className="mr-1 inline" /> {publishedCount} published
             </div>
@@ -135,6 +150,7 @@ export default function ManageIpos() {
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-2">
             {[
+              ['checkable', 'Checkable'],
               ['all', 'All'],
               ['published', 'Published'],
               ['held', 'Held for review'],

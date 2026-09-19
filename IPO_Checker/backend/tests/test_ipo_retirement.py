@@ -1,9 +1,10 @@
 """Tests for automatic retirement of IPOs dropped by their registrar.
 
-The rule under test: an IPO published from a registrar's allotment dropdown must
-stop being checkable once the registrar removes it from that dropdown — but only
-when the dropdown was *conclusively read*, and only after repeated confirmation,
-so that one broken scrape can never empty the client-facing list.
+The rule under test: any IPO currently offered as checkable (validated=True +
+Allotment Announced) must stop being checkable once its registrar removes it
+from that dropdown — but only when the dropdown was *conclusively read*, and
+only after repeated confirmation, so that one broken scrape can never empty
+the client-facing list.
 
 `plan_retirement` is pure, so the whole rule is testable without a database. The
 one test that exercises the DB apply layer skips itself unless
@@ -181,7 +182,7 @@ def test_retire_hides_the_row_without_deleting_it(db_session):
     assert refreshed.status == IPOStatus.Closed
 
 
-def test_manual_upload_is_never_retired(db_session):
+def test_manual_upload_is_retired_when_its_registrar_drops_it(db_session):
     from db.models import EndpointType, IPO, IPOStatus, Registrar
     from ipo_sync.auto_detect import _retire_stale_dropdown_ipos
 
@@ -202,7 +203,7 @@ def test_manual_upload_is_never_retired(db_session):
         auto_detected=False,
         validated=True,
         registrar_id=registrar.id,
-        absent_scan_count=5,
+        absent_scan_count=RETIRE_AFTER_SCANS - 1,
     )
     db_session.add(manual)
     db_session.commit()
@@ -210,7 +211,7 @@ def test_manual_upload_is_never_retired(db_session):
     summary = _retire_stale_dropdown_ipos(db_session, {PORTAL: ["Other Ltd"]}, {PORTAL})
     db_session.commit()
 
-    assert summary["retired"] == 0
+    assert summary["retired"] == 1
     refreshed = db_session.query(IPO).filter(IPO.id == manual.id).one()
-    assert refreshed.validated is True
-    assert refreshed.status == IPOStatus.Allotment_Announced
+    assert refreshed.validated is False
+    assert refreshed.status == IPOStatus.Closed
